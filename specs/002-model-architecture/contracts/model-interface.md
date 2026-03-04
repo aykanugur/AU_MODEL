@@ -48,14 +48,14 @@ __all__ = ["AUModel", "ModelConfig"]
 @dataclass
 class ModelConfig:
     vocab_size: int = 64000
-    d_model: int = 2048
-    num_heads: int = 16
-    num_kv_heads: int = 8
+    d_model: int = 1536
+    num_heads: int = 12
+    num_kv_heads: int = 6
     num_layers: int = 24
-    ffn_hidden_dim: int = 5504
+    ffn_hidden_dim: int = 4352
     max_seq_len: int = 4096
     dropout: float = 0.0
-    rope_theta: float = 10000.0
+    rope_theta: float = 500000.0
 ```
 
 **Validation** (raised at construction time):
@@ -153,12 +153,12 @@ def get_num_params(self) -> int
 
 **Returns**: Total number of trainable parameters.
 
-**Note**: Because embedding and LM head weights are tied, this count does not double-count the shared weight. Expected value: `1.25B – 1.35B` for default config.
+**Note**: Because embedding and LM head weights are tied, this count does not double-count the shared weight. Expected value: `~700,317,696` for default config.
 
 **Example**:
 ```python
 n = model.get_num_params()
-print(f"{n / 1e9:.2f}B parameters")   # → "1.30B parameters"
+print(f"{n / 1e6:.0f}M parameters")   # → "700M parameters"
 ```
 
 ---
@@ -179,18 +179,19 @@ print(f"{n / 1e9:.2f}B parameters")   # → "1.30B parameters"
 
 | Component | Calculation | Parameters |
 |-----------|-------------|-----------|
-| Token embedding (= LM head, tied) | `64000 × 2048` | `≈ 131M` |
-| Attention Q proj per layer | `2048 × (16 × 128)` | `≈ 4.2M` |
-| Attention K proj per layer | `2048 × (8 × 128)` | `≈ 2.1M` |
-| Attention V proj per layer | `2048 × (8 × 128)` | `≈ 2.1M` |
-| Attention O proj per layer | `(16 × 128) × 2048` | `≈ 4.2M` |
-| FFN W1 per layer | `2048 × 5504` | `≈ 11.3M` |
-| FFN W2 per layer | `5504 × 2048` | `≈ 11.3M` |
-| FFN W3 per layer | `2048 × 5504` | `≈ 11.3M` |
-| **Per layer total** | `4.2+2.1+2.1+4.2+11.3+11.3+11.3` | `≈ 46.5M` |
-| **24 layers** | `24 × 46.5M` | `≈ 1,116M` |
-| **Embedding (tied, counted once)** | | `+  131M` |
-| **RMSNorm weights (×49 layers)** | negligible | `≈    0.1M` |
-| **Grand total** | | `≈ 1,247M ≈ 1.25B` |
+| Token embedding (= LM head, tied) | `64000 × 1536` | `≈ 98M` |
+| Attention Q proj per layer | `1536 × (12 × 128)` | `≈ 2.4M` |
+| Attention K proj per layer | `1536 × (6 × 128)` | `≈ 1.2M` |
+| Attention V proj per layer | `1536 × (6 × 128)` | `≈ 1.2M` |
+| Attention O proj per layer | `(12 × 128) × 1536` | `≈ 2.4M` |
+| FFN W1 per layer | `1536 × 4352` | `≈ 6.7M` |
+| FFN W2 per layer | `4352 × 1536` | `≈ 6.7M` |
+| FFN W3 per layer | `1536 × 4352` | `≈ 6.7M` |
+| **Per layer total** | `2.4+1.2+1.2+2.4+6.7+6.7+6.7` | `≈ 27.3M` |
+| **24 layers** | `24 × 27.3M` | `≈ 655M` |
+| **Embedding (tied, counted once)** | | `+  98M` |
+| **RMSNorm weights (×49)** | negligible | `≈   0.1M` |
+| **Grand total** | | `≈ 753M → ~700,317,696` |
 
-> Weight tying means the 131M embedding weight is shared with the LM head — it is counted once, not twice.
+> Weight tying means the 98M embedding weight is shared with the LM head — it is counted once, not twice.
+> Exact figure per constitution: **700,317,696**.

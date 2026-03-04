@@ -19,7 +19,7 @@ A researcher imports AUModel, creates it with the default configuration, feeds a
 
 1. **Given** a default `ModelConfig`, **When** `AUModel(config)` is called, **Then** the model is created with no runtime errors and all submodules are accessible.
 2. **Given** an instantiated model and a batch of shape `(2, 128)` integer token IDs, **When** `model(tokens)` is called, **Then** output logits have shape `(2, 128, vocab_size)`.
-3. **Given** an instantiated model, **When** `model.get_num_params()` is called, **Then** the reported count is between 1.25B and 1.35B.
+3. **Given** an instantiated model, **When** `model.get_num_params()` is called, **Then** the reported count is between 680M and 720M.
 4. **Given** a `ModelConfig` where `num_kv_heads` does not evenly divide `num_heads`, **When** `AUModel(config)` is constructed, **Then** a clear `ValueError` is raised before any computation.
 
 ---
@@ -67,7 +67,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 ### Functional Requirements
 
 - **FR-001**: The model package MUST expose `AUModel` and `ModelConfig` as public names importable from `model`.
-- **FR-002**: `ModelConfig` MUST be a dataclass defining: `vocab_size`, `d_model`, `num_heads`, `num_kv_heads`, `num_layers`, `ffn_hidden_dim`, `max_seq_len`, `dropout`, `rope_theta`.
+- **FR-002**: `ModelConfig` MUST be a dataclass defining: `vocab_size`, `d_model`, `num_heads`, `num_kv_heads`, `num_layers`, `ffn_hidden_dim`, `max_seq_len`, `dropout`, `rope_theta`. Default values MUST match constitution exactly: `vocab_size=64000, d_model=1536, num_heads=12, num_kv_heads=6, num_layers=24, ffn_hidden_dim=4352, max_seq_len=4096, dropout=0.0, rope_theta=500000`.
 - **FR-003**: `ModelConfig` MUST validate at construction that `num_heads % num_kv_heads == 0`, raising a `ValueError` with a descriptive message if not.
 - **FR-004**: The attention mechanism MUST apply Rotary Position Embeddings (RoPE) to query and key tensors before the attention dot product.
 - **FR-005**: The attention mechanism MUST implement Grouped Query Attention (GQA): `num_kv_heads` K/V heads shared across `num_heads / num_kv_heads` query head groups.
@@ -79,7 +79,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **FR-011**: RoPE frequency tensors MUST be stored as a non-trainable model buffer so they transfer automatically with the model across devices.
 - **FR-012**: The `forward()` method MUST accept an optional `targets` tensor; when provided, compute and return cross-entropy loss; when absent, return `(logits, None)`.
 - **FR-013**: The model MUST expose a `get_num_params()` method returning the total trainable parameter count.
-- **FR-014**: Default `ModelConfig` values MUST produce a model with approximately 1.3B trainable parameters.
+- **FR-014**: Default `ModelConfig` values MUST produce a model with approximately 700M trainable parameters (~700,317,696 per constitution).
 - **FR-015**: A standalone sanity check script (`model/sanity_check.py`) MUST exist that runs all 4 checks (import, forward shape, param count, initial loss) and exits with code 0 on pass, non-zero on failure.
 - **FR-016**: A Colab notebook (`colab/02_model.ipynb`) MUST exist that runs the same 4 sanity checks plus the single-batch overfit test on GPU.
 - **FR-017**: `Attention.forward()` MUST accept an optional `past_kv` parameter (default `None`). When `None`, standard causal self-attention is used (`is_causal=True`). When provided, it is a tuple `(past_keys, past_values)` that is concatenated with current K/V before the attention dot product, and the updated cache is returned.
@@ -100,7 +100,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 
 - **SC-001**: Model instantiation with default config completes in under 30 seconds on a machine with at least 8 GB RAM.
 - **SC-002**: Forward pass on a batch of 8 sequences of length 512 completes in under 10 seconds on CPU.
-- **SC-003**: Total trainable parameter count is between 1.25B and 1.35B for the default configuration.
+- **SC-003**: Total trainable parameter count is between 680M and 720M for the default configuration (~700,317,696 per constitution).
 - **SC-004**: Initial cross-entropy loss on random data is within 5% of `log(vocab_size)` (~10.77 for vocab size 64,000).
 - **SC-005**: The model overfits a single batch to loss < 0.1 within 50 gradient steps.
 - **SC-006**: Running `python model/sanity_check.py` exits with code 0 and prints PASS for all 4 checks in a clean environment with no manual intervention.
@@ -112,6 +112,22 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **No dropout**: `dropout=0.0` is the default; standard practice for large pretraining runs.
 - **Flash Attention**: `F.scaled_dot_product_attention(is_causal=True)` is used; PyTorch falls back automatically if Flash Attention kernel is unavailable.
 - **Weight initialization**: PyTorch default initialization is used; no custom `_init_weights` required for this phase.
+
+## ⚠ Constitution Gate — Violation Record
+
+**Detected**: 2026-03-04 during `/speckit.plan` gate check.
+**Resolution**: Spec corrected. DESIGN.md contains stale 1.3B values from an earlier design iteration. PRD v1.3 and constitution both specify 700M. Constitution wins — all spec values updated to match.
+
+| Parameter | Original Spec (stale) | Corrected (constitution) |
+|-----------|----------------------|-------------------------|
+| `d_model` | 2048 | 1536 |
+| `num_heads` | 16 | 12 |
+| `num_kv_heads` | 8 | 6 |
+| `ffn_hidden_dim` | 5504 | 4352 |
+| `rope_theta` | 10000.0 | 500000 |
+| Total params | ~1.3B | ~700M |
+
+**Action required on DESIGN.md**: Should be updated to reflect 700M values in a separate task (non-blocking for this epic).
 - **`torch.compile`**: `torch.compile(model)` is called by the trainer (Epic 4), not inside `AUModel`. Sanity checks and inference run on the uncompiled model.
 - **PyTorch version**: Minimum PyTorch 2.1. `F.scaled_dot_product_attention` is used for attention (built-in, no extra install). External `flash-attn` package is optional and deferred to Epic 4.
 
