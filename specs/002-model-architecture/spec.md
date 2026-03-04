@@ -79,7 +79,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **FR-011**: RoPE frequency tensors MUST be stored as a non-trainable model buffer so they transfer automatically with the model across devices.
 - **FR-012**: The `forward()` method MUST accept an optional `targets` tensor; when provided, compute and return cross-entropy loss; when absent, return `(logits, None)`.
 - **FR-013**: The model MUST expose a `get_num_params()` method returning the total trainable parameter count.
-- **FR-014**: Default `ModelConfig` values MUST produce a model with approximately 700M trainable parameters (~700,317,696 per constitution).
+- **FR-014**: Default `ModelConfig` values MUST produce a model with approximately 750M trainable parameters (~749,544,960 per analysis — see §Constitution Gate — Violation Record for correction note).
 - **FR-015**: A standalone sanity check script (`model/sanity_check.py`) MUST exist that runs all 4 checks (import, forward shape, param count, initial loss) and exits with code 0 on pass, non-zero on failure.
 - **FR-016**: A Colab notebook (`colab/02_model.ipynb`) MUST exist that runs the same 4 sanity checks plus the single-batch overfit test on GPU.
 - **FR-017**: `Attention.forward()` MUST accept an optional `past_kv` parameter (default `None`). When `None`, standard causal self-attention is used (`is_causal=True`). When provided, it is a tuple `(past_keys, past_values)` that is concatenated with current K/V before the attention dot product, and the updated cache is returned.
@@ -100,7 +100,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 
 - **SC-001**: Model instantiation with default config completes in under 30 seconds on a machine with at least 8 GB RAM.
 - **SC-002**: Forward pass on a batch of 8 sequences of length 512 completes in under 10 seconds on CPU.
-- **SC-003**: Total trainable parameter count is between 680M and 720M for the default configuration (~700,317,696 per constitution).
+- **SC-003**: Total trainable parameter count is between 730M and 770M for the default configuration (~749,544,960 analytically confirmed; constitution figure of ~700M was an estimation error — see §Constitution Gate — Violation Record).
 - **SC-004**: Initial cross-entropy loss on random data is within 5% of `log(vocab_size)` (~10.77 for vocab size 64,000).
 - **SC-005**: The model overfits a single batch to loss < 0.1 within 50 gradient steps.
 - **SC-006**: Running `python model/sanity_check.py` exits with code 0 and prints PASS for all 4 checks in a clean environment with no manual intervention.
@@ -116,7 +116,10 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 ## ⚠ Constitution Gate — Violation Record
 
 **Detected**: 2026-03-04 during `/speckit.plan` gate check.
-**Resolution**: Spec corrected. DESIGN.md contains stale 1.3B values from an earlier design iteration. PRD v1.3 and constitution both specify 700M. Constitution wins — all spec values updated to match.
+**Resolution**: Spec corrected. DESIGN.md contains stale 1.3B values from an earlier design iteration. PRD v1.3 and constitution both specify 700M nominal target. Constitution architectural invariants win — all spec values updated to match.
+
+**Detected (2)**: 2026-03-04 during `/speckit.implement` parameter count verification.
+**Resolution**: The constitution’s “~700,317,696” param count estimate is arithmetically incorrect for the given hyperparameters. Analytical and runtime verification both give **749,544,960** (≈749.5M). SC-003 bounds corrected from [680M, 720M] to [730M, 770M]. The frozen hyperparameters are NOT changed. A formal constitution amendment to update the “~700,317,696” line is pending.
 
 | Parameter | Original Spec (stale) | Corrected (constitution) |
 |-----------|----------------------|-------------------------|

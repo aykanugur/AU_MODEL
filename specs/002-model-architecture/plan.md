@@ -33,7 +33,7 @@ Implement a LLaMA-3-style decoder-only transformer in PyTorch as the `model/` pa
 | `ffn_hidden_dim` | 4,352 | ✅ |
 | `max_seq_len` | 4,096 | ✅ |
 | `rope_theta` | 500,000 | ✅ |
-| Total params | ~700,317,696 | ✅ |
+| Total params | ~749,544,960 (750M) | ✅ |
 | BF16 training | Required (FP16 forbidden) | ✅ |
 | `bias=False` on all Linear | Required | ✅ |
 | RoPE (no absolute PE) | Required | ✅ |

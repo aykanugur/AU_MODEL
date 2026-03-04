@@ -51,7 +51,7 @@
 - [ ] T009 [US1] Implement `AUModel` (`nn.Embedding(64000, 1536)`, 24 `TransformerBlock`s, final `RMSNorm`, `nn.Linear(1536, 64000, bias=False)` LM head, weight tying `lm_head.weight = embed.weight`, call `self.register_buffer("freqs_cis", compute_freqs_cis(...))` in `__init__`, `forward(tokens: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]` with guard `if tokens.shape[1] > self.config.max_seq_len: raise ValueError(f"seq_len {tokens.shape[1]} exceeds max_seq_len {self.config.max_seq_len}")` before embed, returning `(logits, loss|None)`, `get_num_params() -> int`) in `model/transformer.py`
 - [ ] T010 [US1] Wire public exports in `model/__init__.py` (`from .transformer import AUModel; from .config import ModelConfig; __all__ = ["AUModel", "ModelConfig"]`)
 
-**Checkpoint**: US1 fully functional. `AUModel(ModelConfig())` instantiates in < 30s. Forward pass on `(2, 128)` returns `(2, 128, 64000)`. `model.get_num_params()` returns value between 680M–720M. Bad GQA config raises `ValueError`.
+**Checkpoint**: US1 fully functional. `AUModel(ModelConfig())` instantiates in < 30s. Forward pass on `(2, 128)` returns `(2, 128, 64000)`. `model.get_num_params()` returns value between 730M–770M. Bad GQA config raises `ValueError`.
 
 ---
 
@@ -63,7 +63,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Implement `model/sanity_check.py` CLI script with 4 sequential checks: (1) import+instantiate `AUModel(ModelConfig())`, (2) forward shape check `(2,128) → (2,128,64000)`, (3) param count in [680M, 720M] via `get_num_params()`, (4) initial loss check: mean cross-entropy on 10 random batches ∈ [10.0, 11.0]; print `[PASS]`/`[FAIL]` per check; `sys.exit(0)` on all pass, `sys.exit(1)` on any failure. **Constitution**: use `if/raise ValueError(...)` NOT `assert` anywhere in this file
+- [ ] T011 [US2] Implement `model/sanity_check.py` CLI script with 4 sequential checks: (1) import+instantiate `AUModel(ModelConfig())`, (2) forward shape check `(2,128) → (2,128,64000)`, (3) param count in [730M, 770M] via `get_num_params()` (analytically confirmed ~749,544,960), (4) initial loss check: mean cross-entropy on 10 random batches ∈ [10.0, 11.0]; print `[PASS]`/`[FAIL]` per check; `sys.exit(0)` on all pass, `sys.exit(1)` on any failure. **Constitution**: use `if/raise ValueError(...)` NOT `assert` anywhere in this file
 
 **Checkpoint**: `python model/sanity_check.py` exits with code 0, all 4 lines print `[PASS]`. Satisfies FR-015 and SC-006.
 

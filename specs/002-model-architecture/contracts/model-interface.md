@@ -153,12 +153,12 @@ def get_num_params(self) -> int
 
 **Returns**: Total number of trainable parameters.
 
-**Note**: Because embedding and LM head weights are tied, this count does not double-count the shared weight. Expected value: `~700,317,696` for default config.
+**Note**: Because embedding and LM head weights are tied, this count does not double-count the shared weight. Expected value: `~749,544,960` for default config.
 
 **Example**:
 ```python
 n = model.get_num_params()
-print(f"{n / 1e6:.0f}M parameters")   # → "700M parameters"
+print(f"{n / 1e6:.0f}M parameters")   # → "750M parameters"
 ```
 
 ---
@@ -187,11 +187,12 @@ print(f"{n / 1e6:.0f}M parameters")   # → "700M parameters"
 | FFN W1 per layer | `1536 × 4352` | `≈ 6.7M` |
 | FFN W2 per layer | `4352 × 1536` | `≈ 6.7M` |
 | FFN W3 per layer | `1536 × 4352` | `≈ 6.7M` |
-| **Per layer total** | `2.4+1.2+1.2+2.4+6.7+6.7+6.7` | `≈ 27.3M` |
-| **24 layers** | `24 × 27.3M` | `≈ 655M` |
-| **Embedding (tied, counted once)** | | `+  98M` |
-| **RMSNorm weights (×49)** | negligible | `≈   0.1M` |
-| **Grand total** | | `≈ 753M → ~700,317,696` |
+| **Per layer total** | attn `7,077,888` + ffn `20,054,016` + 2×norms `3,072` | `≈ 27.13M` |
+| **24 layers** | `24 × 27,134,976` | `≈ 651.24M` |
+| **Embedding (tied, counted once)** | `64000 × 1536` | `+98.304M` |
+| **Final RMSNorm** | `1536` | `≈ 0.0015M` |
+| **Grand total** | | `≈ 749,544,960` |
 
 > Weight tying means the 98M embedding weight is shared with the LM head — it is counted once, not twice.
-> Exact figure per constitution: **700,317,696**.
+> Exact figure (analytically verified): **749,544,960** (~749.5M).
+> Previous spec stated ~700M which was an arithmetic error; corrected in spec amendment.

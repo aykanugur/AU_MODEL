@@ -184,9 +184,9 @@ The top-level module. Orchestrates embedding, all 24 transformer blocks, final n
 | Component | Count |
 |-----------|-------|
 | Embedding (= LM head, tied) | ~98.3M |
-| 24 × TransformerBlock | ~652.8M |
+| 24 × TransformerBlock | ~651.2M |
 | RMSNorm (final + 2×24 blocks = 49) | ~0.075M |
-| **Total** | **~700,317,696 ≈ 700M** |
+| **Total** | **~749,544,960 ≈ 749.5M** |
 
 ### Tensor shapes through full forward pass
 
