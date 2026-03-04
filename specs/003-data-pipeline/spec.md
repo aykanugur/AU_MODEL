@@ -4,6 +4,15 @@
 **Created**: 4 Mart 2026
 **Status**: Draft
 
+## Clarifications
+
+### Session 2026-03-04
+
+- Q: Should deduplication be applied per-source independently or across all sources combined? → A: Cross-source (global) deduplication using a memory-efficient Bloom filter — prioritises model accuracy by preventing any document appearing more than once regardless of source.
+- Q: Veri seti sürümleri için sabit bir versiyon mu kullanalım yoksa her çalıştırmada en güncel sürümü mü çekelim? → A: B — internette araştırılarak en güncel sabit sürümler belirlendi: Wikipedia `20231101.tr` (HuggingFace'teki tek dump), OSCAR `OSCAR-2301` config `tr` (Ocak 2023, erişim kısıtlı — HF hesabı onayı gerekir), mC4 `allenai/c4` config `tr` (versiyonsuz statik dataset). Sabit versiyonlar pin'lenip reproduce edilebilirlik sağlanacak.
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Single-Source Download, Clean & Shard (Priority: P1)
@@ -72,7 +81,7 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - **FR-002**: The pipeline MUST read the HuggingFace API token from the `HF_TOKEN` environment variable (loaded from `.env`); credentials MUST NOT be hardcoded
 - **FR-003**: Each source dataset MUST be loaded in **streaming mode** to avoid materialising the full dataset before processing begins
 - **FR-004**: Each document MUST pass through a cleaning step that: removes HTML tags, normalises Unicode to NFC, and discards documents with fewer than 100 tokens after tokenisation
-- **FR-005**: The pipeline MUST deduplicate documents using MD5 hash of cleaned text; duplicate documents are silently skipped
+- **FR-005**: The pipeline MUST deduplicate documents **across all sources combined** using a Bloom filter on the MD5 hash of each document's cleaned text; duplicate documents are silently skipped regardless of which source they originate from. A Bloom filter MUST be used (not a plain hash set) to keep memory usage under 1 GB at 30B-token corpus scale.
 - **FR-006**: The pipeline MUST tokenise cleaned text using the trained BPE model at `tokenizer/turkish_bpe.model`, prepending BOS (`id=1`) and appending EOS (`id=2`) to each document
 - **FR-007**: Tokenised documents MUST be concatenated into a flat uint16 numpy array and written to binary shard files of approximately 1 GB each, named `shard_NNNN.bin`, in the configured output directory
 - **FR-008**: The pipeline MUST support resumable execution: on restart it detects existing complete shards and skips them, continuing from the next incomplete position
@@ -108,3 +117,12 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - HuggingFace OSCAR and mC4 datasets require a valid `HF_TOKEN` for streaming access
 - Token IDs fit in uint16 (max value 65,535 > vocab_size 64,000 ✓)
 - CC-100 is an optional fourth source; the 30B token target is achievable with Wikipedia + OSCAR + mC4 alone
+
+### Pinned Dataset Versions (researched 2026-03-04)
+
+| Source | HuggingFace ID | Config / Split | Notes |
+|--------|---------------|----------------|-------|
+| Wikipedia | `wikimedia/wikipedia` | `20231101.tr` | Only available dump on HF; ~500K Turkish articles |
+| OSCAR | `oscar-corpus/OSCAR-2301` | `tr` (dedup) | Jan 2023 release; 73.7 GB Turkish; **gated — HF account approval required** |
+| mC4 | `allenai/c4` | `multilingual` / `tr` | No versioning; static dataset; ~6B tr tokens |
+| CC-100 | `cc100` | `tr` | Optional fallback if OSCAR access is denied |
