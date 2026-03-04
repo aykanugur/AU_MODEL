@@ -27,6 +27,8 @@ NORMALIZATION_RULE = "identity"
 BYTE_FALLBACK = True
 INPUT_SENTENCE_SIZE = 10_000_000
 SHUFFLE_INPUT = True
+# NOTE: sentencepiece Python API does not accept an RNG seed directly.
+# RANDOM_SEED is documented here for reference only — not passed to SPM.
 RANDOM_SEED = 42
 
 PAD_ID = 0
@@ -154,7 +156,9 @@ def run_spm_training(
         byte_fallback=BYTE_FALLBACK,
         input_sentence_size=INPUT_SENTENCE_SIZE,
         shuffle_input_sentence=SHUFFLE_INPUT,
-        seed_sentencepiece_size=RANDOM_SEED,
+        # NOTE: sentencepiece does not expose an RNG seed in its Python API.
+        # Reproducibility is controlled by input_sentence_size + shuffle_input_sentence.
+        # seed_sentencepiece_size is the EM seed model SIZE (default 1M) — NOT a random seed.
         pad_id=PAD_ID,
         unk_id=UNK_ID,
         bos_id=BOS_ID,
