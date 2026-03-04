@@ -78,6 +78,8 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 - What happens when `get_lr()` is called with a step value below 0 or above `max_steps`? It must return a clamped valid value without raising an exception.
 - What happens when gradient accumulation steps is 1? Trainer must behave identically to accumulation > 1 but update every step.
 - What happens when WandB is unavailable (no internet, no API key)? Trainer must fall back to console-only logging and continue without crashing.
+- What happens when the validation shard is missing or not specified? Trainer must warn and skip the validation pass rather than crashing; training continues unaffected.
+- What happens if all shards from one data source are exhausted while others remain? The data loader must cycle back over that source's shards (re-shuffled) to maintain interleaving until all sources reach epoch boundary together.
 
 ## Requirements *(mandatory)*
 
@@ -89,14 +91,16 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 - **FR-004**: The learning-rate scheduler MUST implement linear warm-up from 0 to `max_lr=3e-4` over the first 2000 steps, followed by cosine decay to `min_lr=3e-5` over `max_steps=100,000` steps, then hold at `min_lr`.
 - **FR-005**: The trainer MUST use BF16 mixed precision for the forward pass; FP16 is not permitted.
 - **FR-006**: The trainer MUST compile the model (graph optimisation) once, immediately after initialisation and before the first forward pass.
-- **FR-007**: Checkpoints MUST be saved every 1000 steps to the configured output directory and MUST include model weights, optimiser state, current step number, and training configuration.
+- **FR-007**: Checkpoints MUST be saved every 1000 steps to the configured output directory and MUST include model weights, optimiser state, current step number, and training configuration. The trainer MUST retain only the 10 most recent checkpoints, automatically deleting the oldest when the count exceeds 10.
 - **FR-008**: The trainer MUST support seamless resume: at startup it discovers the highest-numbered checkpoint in the output directory, restores model + optimiser state, and continues from the next step.
-- **FR-009**: The trainer MUST log the following at each logging interval: step, training loss, current learning rate, tokens per second, and MFU.
+- **FR-009**: The trainer MUST log the following at each logging interval: step, training loss, current learning rate, tokens per second, MFU, and pre-clip gradient norm (`grad_norm`).
 - **FR-010**: WandB metric logging MUST be optional; if unavailable or disabled, the trainer MUST fall back to console-only logging without crashing.
 - **FR-011**: The Colab notebook MUST mount Google Drive, install all required dependencies, enable TF32 hardware optimisations, load the model from `ModelConfig`, and launch or resume the training loop — all in sequential cells runnable top-to-bottom.
-- **FR-012**: The data loader MUST stream token windows from pre-built binary shard files and MUST NOT load all shards into RAM simultaneously.
+- **FR-012**: The data loader MUST stream token windows from pre-built binary shard files and MUST NOT load all shards into RAM simultaneously. At the start of each epoch the shard list MUST be shuffled randomly. Shards from different data sources (e.g. Wikipedia, OSCAR, mC4, CC-100) MUST be interleaved rather than processed source-by-source, so that the model receives a balanced mixture at every point in training and is not at risk of forgetting earlier sources.
 - **FR-013**: The AdamW optimiser MUST be configured with `beta1=0.9`, `beta2=0.95`, `weight_decay=0.1`, and `eps=1e-8`.
 - **FR-014**: The trainer MUST accept `--shard-dir` and `--output-dir` as CLI arguments specifying shard source and checkpoint destination.
+- **FR-015**: The trainer MUST target a single GPU (cuda:0); multi-GPU (DDP/FSDP) is explicitly out of scope for this epic.
+- **FR-016**: The trainer MUST compute and log a validation loss every 1000 steps using a dedicated held-out validation shard; the validation pass MUST run with gradients disabled and MUST NOT affect model weights or optimiser state.
 
 ### Key Entities
 
@@ -115,6 +119,17 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 - **SC-004**: A 50-step smoke-test run with a synthetic shard completes in under 5 minutes on a local CPU without raising any exception.
 - **SC-005**: The LR scheduler returns `max_lr` at exactly step 2000 and `min_lr` at `max_steps`, verified by a unit test covering all three regions (warmup, decay, hold).
 - **SC-006**: A checkpoint saved to disk is loadable and produces identical logits for the same input batch as the in-memory model (round-trip test).
+- **SC-007**: Validation loss logged at step 1000 is a finite, non-NaN value and is within a reasonable range of the training loss at the same step (difference < 2.0), confirming the validation pass runs correctly.
+
+## Clarifications
+
+### Session 2026-03-04
+
+- Q: Çok GPU (DDP/FSDP) desteği gerekli mi, yoksa trainer tek GPU üzerine mi tasarlanmalı? → A: Tek GPU — DDP/FSDP yok; trainer tek bir cihaz (cuda:0) varsayar.
+- Q: Doğrulama kaybı (validation loss) ölçülmeli mi? → A: Evet — her 1000 adımda ayrı bir validation şardı üzerinde loss hesapla ve logla.
+- Q: Kontrol noktası saklama politikası ne olmalı? → A: Son 10 checkpoint sakla, en eskisini sil.
+- Q: `grad_norm` her log satırında raporlanmalı mı? → A: Evet — klip öncesi ham gradient norm her log olayında raporlanmalı.
+- Q: Shard sırası sabit mi yoksa karıştırılsın mı? → A: Her epoch başında shard listesi karıştırılsın; ayrıca farklı kaynaklara ait shardlar (Wikipedia, OSCAR vb.) sıralı değil, birbiriyle iç içe geçmiş (interleaved) şekilde sunulmalı — böylece model küçük olduğundan dolayı önceki kaynaklarda öğrenilenlerin unutulması (catastrophic forgetting) engellenmiş olur.
 
 ## Assumptions
 
