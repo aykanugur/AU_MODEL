@@ -18,8 +18,8 @@
 
 **Purpose**: Install new dependencies and scaffold empty source files.
 
-- [ ] T001 Install new dependencies: `pip install pybloom-live mmh3` and verify import in Python 3.11
-- [ ] T002 [P] Scaffold `scripts/prepare_data.py` with module-level constants: `BOS_ID=2`, `EOS_ID=3`, `TOKENS_PER_SHARD=500_000_000`, `MIN_DOC_TOKENS=100`, `BATCH_SIZE=1_000`, `BLOOM_CAPACITY=100_000_000`, `BLOOM_ERROR=0.01`, `VOCAB_SIZE=64_000`
+- [X] T001 Install new dependencies: `pip install pybloom-live mmh3` and verify import in Python 3.11
+- [X] T002 [P] Scaffold `scripts/prepare_data.py` with module-level constants: `BOS_ID=2`, `EOS_ID=3`, `TOKENS_PER_SHARD=500_000_000`, `MIN_DOC_TOKENS=100`, `BATCH_SIZE=1_000`, `BLOOM_CAPACITY=100_000_000`, `BLOOM_ERROR=0.01`, `VOCAB_SIZE=64_000`
 
 ---
 
@@ -29,8 +29,8 @@
 
 **⚠️ CRITICAL**: US1 and US2 cannot proceed without T003–T004.
 
-- [ ] T003 Add `SOURCES` config dict in `scripts/prepare_data.py` mapping each source name to `{hf_id, config, split, text_field, requires_auth}` per the pinned versions in [data-model.md](data-model.md): wikipedia=`wikimedia/wikipedia`/config=`20231101.tr`/split=`"train"`/`"text"`, oscar=`oscar-corpus/OSCAR-2301`/config=`tr`/split=`"train"`/`"content"`, mc4=`allenai/c4`/config=`tr`/split=`"train"`/`"text"`, cc100=`cc100`/config=`tr`/split=`"train"`/`"text"`
-- [ ] T004 Implement `load_hf_token() -> str | None` in `scripts/prepare_data.py`: load `.env` via `python-dotenv`, return `HF_TOKEN` value; raise `ValueError` with clear message if a source requires auth and token is absent
+- [X] T003 Add `SOURCES` config dict in `scripts/prepare_data.py` mapping each source name to `{hf_id, config, split, text_field, requires_auth}` per the pinned versions in [data-model.md](data-model.md): wikipedia=`wikimedia/wikipedia`/config=`20231101.tr`/split=`"train"`/`"text"`, oscar=`oscar-corpus/OSCAR-2301`/config=`tr`/split=`"train"`/`"content"`, mc4=`allenai/c4`/config=`tr`/split=`"train"`/`"text"`, cc100=`cc100`/config=`tr`/split=`"train"`/`"text"`
+- [X] T004 Implement `load_hf_token() -> str | None` in `scripts/prepare_data.py`: load `.env` via `python-dotenv`, return `HF_TOKEN` value; raise `ValueError` with clear message if a source requires auth and token is absent
 
 **Checkpoint**: Foundation ready — US1, US2, US3 can now begin (US3 is fully independent).
 
@@ -42,17 +42,17 @@
 
 **Independent Test**: `python scripts/prepare_data.py --source wikipedia --output /tmp/test_shards/` → at least one `shard_0000.bin` written, token count printed, `ShardedDataset` reads it back without errors.
 
-- [ ] T005 [US1] Implement CLI arg parsing in `scripts/prepare_data.py`: `--source` (choices: wikipedia, oscar, mc4, cc100, all), `--output` (str, default `"/content/drive/MyDrive/AUModel/data/"` per constitution checkpoint path), `--tokenizer` (str, default `tokenizer/turkish_bpe.model`)
-- [ ] T006 [US1] Implement `clean_document(text: str) -> str | None` in `scripts/prepare_data.py`: strip HTML tags with regex, apply `unicodedata.normalize("NFC", text)`, return `None` if result is empty string (short-circuit before tokenization)
-- [ ] T007 [US1] Implement `init_bloom(output_dir: str) -> BloomFilter` in `scripts/prepare_data.py`: load from `bloom.pkl` if it exists in output_dir (resume), else create new `BloomFilter(BLOOM_CAPACITY, BLOOM_ERROR)`; implement `save_bloom(bloom, path: str) -> None` using `pickle.dump`
-- [ ] T008 [US1] Implement `load_manifest(output_dir: str) -> dict` and `save_manifest(manifest: dict, output_dir: str) -> None` in `scripts/prepare_data.py`: read/write `shards_manifest.json` per the schema in [data-model.md](data-model.md); return empty manifest dict if file does not exist
-- [ ] T009 [US1] Implement `_init_worker(model_path: str) -> None` and `_tokenize_doc(text: str) -> list[int]` module-level functions in `scripts/prepare_data.py` for `multiprocessing.Pool(spawn)`: worker loads SentencePiece once per process; `_tokenize_doc` returns `[BOS_ID] + sp.EncodeAsIds(text) + [EOS_ID]`
-- [ ] T010 [US1] Implement `tokenize_batch(texts: list[str], pool: Pool) -> list[list[int]]` in `scripts/prepare_data.py`: calls `pool.map(_tokenize_doc, texts)`, filters results where `len(ids) < MIN_DOC_TOKENS`, validates all IDs in `[0, VOCAB_SIZE)` raising `ValueError` if any are out of range
-- [ ] T011 [US1] Implement `ShardWriter` class in `scripts/prepare_data.py`: holds a `np.ndarray(TOKENS_PER_SHARD, dtype=np.uint16)` buffer and `pos` counter; `write_tokens(ids)` fills buffer; `flush(output_dir, shard_idx, source_counts)` writes `shard_NNNN.bin` via `np.ndarray.tofile`, then validates (size > 0, `np.fromfile` round-trip), updates manifest and saves Bloom checkpoint; deletes and re-raises on validation failure
-- [ ] T012 [US1] Implement `stream_source(source_name: str, hf_token: str | None) -> Iterator[str]` in `scripts/prepare_data.py`: calls `load_dataset(hf_id, config, split="train", streaming=True, token=hf_token)`, yields `record[text_field]` for each record
-- [ ] T013 [US1] Implement `run_pipeline(sources: list[str], output_dir: str, tokenizer_path: str)` main loop in `scripts/prepare_data.py`: initialize Bloom + manifest + Pool(spawn, initializer=_init_worker); for each source stream documents → `clean_document` → dedup via Bloom → accumulate batch of `BATCH_SIZE` → `tokenize_batch` → `ShardWriter.write_tokens`; flush final partial shard on completion; after processing each source print `[WARNING] Source <name> produced 0 tokens — all documents filtered or source empty` if that source contributed zero tokens
-- [ ] T014 [US1] Add dual-level progress reporting inside `run_pipeline` in `scripts/prepare_data.py`: print `[<source>] <N> docs | <M>M tokens` every 10,000 docs; print `[Shard NNNN/----] <tokens>M tokens | <GB> GB written | elapsed HH:MM:SS` after each `ShardWriter.flush`
-- [ ] T015 [US1] Add final summary print at end of `run_pipeline` in `scripts/prepare_data.py`: total shards, total tokens, per-source token breakdown table, total elapsed time; add `if __name__ == "__main__":` entry point calling `run_pipeline`
+- [X] T005 [US1] Implement CLI arg parsing in `scripts/prepare_data.py`: `--source` (choices: wikipedia, oscar, mc4, cc100, all), `--output` (str, default `"/content/drive/MyDrive/AUModel/data/"` per constitution checkpoint path), `--tokenizer` (str, default `tokenizer/turkish_bpe.model`)
+- [X] T006 [US1] Implement `clean_document(text: str) -> str | None` in `scripts/prepare_data.py`: strip HTML tags with regex, apply `unicodedata.normalize("NFC", text)`, return `None` if result is empty string (short-circuit before tokenization)
+- [X] T007 [US1] Implement `init_bloom(output_dir: str) -> BloomFilter` in `scripts/prepare_data.py`: load from `bloom.pkl` if it exists in output_dir (resume), else create new `BloomFilter(BLOOM_CAPACITY, BLOOM_ERROR)`; implement `save_bloom(bloom, path: str) -> None` using `pickle.dump`
+- [X] T008 [US1] Implement `load_manifest(output_dir: str) -> dict` and `save_manifest(manifest: dict, output_dir: str) -> None` in `scripts/prepare_data.py`: read/write `shards_manifest.json` per the schema in [data-model.md](data-model.md); return empty manifest dict if file does not exist
+- [X] T009 [US1] Implement `_init_worker(model_path: str) -> None` and `_tokenize_doc(text: str) -> list[int]` module-level functions in `scripts/prepare_data.py` for `multiprocessing.Pool(spawn)`: worker loads SentencePiece once per process; `_tokenize_doc` returns `[BOS_ID] + sp.EncodeAsIds(text) + [EOS_ID]`
+- [X] T010 [US1] Implement `tokenize_batch(texts: list[str], pool: Pool) -> list[list[int]]` in `scripts/prepare_data.py`: calls `pool.map(_tokenize_doc, texts)`, filters results where `len(ids) < MIN_DOC_TOKENS`, validates all IDs in `[0, VOCAB_SIZE)` raising `ValueError` if any are out of range
+- [X] T011 [US1] Implement `ShardWriter` class in `scripts/prepare_data.py`: holds a `np.ndarray(TOKENS_PER_SHARD, dtype=np.uint16)` buffer and `pos` counter; `write_tokens(ids)` fills buffer; `flush(output_dir, shard_idx, source_counts)` writes `shard_NNNN.bin` via `np.ndarray.tofile`, then validates (size > 0, `np.fromfile` round-trip), updates manifest and saves Bloom checkpoint; deletes and re-raises on validation failure
+- [X] T012 [US1] Implement `stream_source(source_name: str, hf_token: str | None) -> Iterator[str]` in `scripts/prepare_data.py`: calls `load_dataset(hf_id, config, split="train", streaming=True, token=hf_token)`, yields `record[text_field]` for each record
+- [X] T013 [US1] Implement `run_pipeline(sources: list[str], output_dir: str, tokenizer_path: str)` main loop in `scripts/prepare_data.py`: initialize Bloom + manifest + Pool(spawn, initializer=_init_worker); for each source stream documents → `clean_document` → dedup via Bloom → accumulate batch of `BATCH_SIZE` → `tokenize_batch` → `ShardWriter.write_tokens`; flush final partial shard on completion; after processing each source print `[WARNING] Source <name> produced 0 tokens — all documents filtered or source empty` if that source contributed zero tokens
+- [X] T014 [US1] Add dual-level progress reporting inside `run_pipeline` in `scripts/prepare_data.py`: print `[<source>] <N> docs | <M>M tokens` every 10,000 docs; print `[Shard NNNN/----] <tokens>M tokens | <GB> GB written | elapsed HH:MM:SS` after each `ShardWriter.flush`
+- [X] T015 [US1] Add final summary print at end of `run_pipeline` in `scripts/prepare_data.py`: total shards, total tokens, per-source token breakdown table, total elapsed time; add `if __name__ == "__main__":` entry point calling `run_pipeline`
 
 ---
 
@@ -64,10 +64,10 @@
 
 **Dependency**: US1 must be complete. `stream_source`, `run_pipeline`, `ShardWriter` from US1 are extended here.
 
-- [ ] T016 [US2] Extend `run_pipeline` in `scripts/prepare_data.py` to accept `sources=["wikipedia","oscar","mc4","cc100"]` when `--source all`; iterate sources in order, tracking per-source token counts in the manifest `source_totals` field throughout the run
-- [ ] T017 [P] [US2] Implement `retry_stream(source_name, hf_token, max_retries=3)` decorator/wrapper in `scripts/prepare_data.py`: on `requests.exceptions.ConnectionError` or `datasets.exceptions.DatasetGenerationError`, wait `2**attempt` seconds and retry; after 3 failures log warning and skip source
-- [ ] T018 [P] [US2] Implement `check_drive_space(output_dir: str, min_gb: float = 50.0) -> None` in `scripts/prepare_data.py`: call `shutil.disk_usage(output_dir).free`; if free bytes < `min_gb * 1e9` print warning and `raise SystemExit(1)` without corrupting existing shards; call this inside `ShardWriter.flush` before writing
-- [ ] T019 [US2] Update `ShardWriter.flush` and manifest logic in `scripts/prepare_data.py` to track per-source token contribution per shard (`source_counts` dict) and accumulate into `manifest["source_totals"]`; update final summary print to use real per-source totals
+- [X] T016 [US2] Extend `run_pipeline` in `scripts/prepare_data.py` to accept `sources=["wikipedia","oscar","mc4","cc100"]` when `--source all`; iterate sources in order, tracking per-source token counts in the manifest `source_totals` field throughout the run
+- [X] T017 [P] [US2] Implement `retry_stream(source_name, hf_token, max_retries=3)` decorator/wrapper in `scripts/prepare_data.py`: on `requests.exceptions.ConnectionError` or `datasets.exceptions.DatasetGenerationError`, wait `2**attempt` seconds and retry; after 3 failures log warning and skip source
+- [X] T018 [P] [US2] Implement `check_drive_space(output_dir: str, min_gb: float = 50.0) -> None` in `scripts/prepare_data.py`: call `shutil.disk_usage(output_dir).free`; if free bytes < `min_gb * 1e9` print warning and `raise SystemExit(1)` without corrupting existing shards; call this inside `ShardWriter.flush` before writing
+- [X] T019 [US2] Update `ShardWriter.flush` and manifest logic in `scripts/prepare_data.py` to track per-source token contribution per shard (`source_counts` dict) and accumulate into `manifest["source_totals"]`; update final summary print to use real per-source totals
 
 ---
 
@@ -79,17 +79,17 @@
 
 **Dependency**: None (can be implemented before US1/US2 complete; test against any fake shard).
 
-- [ ] T020 [P] [US3] Implement `ShardedDataset.__init__(self, shard_paths: list[str], seq_len: int)` in `training/dataset.py`: for each path raise `ValueError` if missing, empty, or `byte_size % 2 != 0`; store shard sizes (token counts) and compute cumulative offset array for O(1) index lookup; do NOT memmap at init (open per-access for worker safety)
-- [ ] T021 [P] [US3] Implement `ShardedDataset.__len__(self) -> int` in `training/dataset.py`: return `total_tokens // seq_len` where `total_tokens` is sum of all shard token counts
-- [ ] T022 [US3] Implement `ShardedDataset.__getitem__(self, idx: int) -> tuple[torch.LongTensor, torch.LongTensor]` in `training/dataset.py`: compute global token offset `idx * seq_len`, map to shard via cumulative offset array, open shard as `np.memmap(..., dtype="uint16", mode="r")`, slice `seq_len + 1` tokens (spanning shard boundary if needed), split into `input_ids[0:seq_len]` and `target_ids[1:seq_len+1]`, return as `torch.LongTensor` pair
-- [ ] T023 [P] [US3] Verify `DataLoader(dataset, num_workers=4)` safety in `training/dataset.py`: since each `__getitem__` opens its own memmap, no shared state exists between workers; add comment documenting this; write a quick `assert` check in `__init__` that each shard file is readable (no lock)
+- [X] T020 [P] [US3] Implement `ShardedDataset.__init__(self, shard_paths: list[str], seq_len: int)` in `training/dataset.py`: for each path raise `ValueError` if missing, empty, or `byte_size % 2 != 0`; store shard sizes (token counts) and compute cumulative offset array for O(1) index lookup; do NOT memmap at init (open per-access for worker safety)
+- [X] T021 [P] [US3] Implement `ShardedDataset.__len__(self) -> int` in `training/dataset.py`: return `total_tokens // seq_len` where `total_tokens` is sum of all shard token counts
+- [X] T022 [US3] Implement `ShardedDataset.__getitem__(self, idx: int) -> tuple[torch.LongTensor, torch.LongTensor]` in `training/dataset.py`: compute global token offset `idx * seq_len`, map to shard via cumulative offset array, open shard as `np.memmap(..., dtype="uint16", mode="r")`, slice `seq_len + 1` tokens (spanning shard boundary if needed), split into `input_ids[0:seq_len]` and `target_ids[1:seq_len+1]`, return as `torch.LongTensor` pair
+- [X] T023 [P] [US3] Verify `DataLoader(dataset, num_workers=4)` safety in `training/dataset.py`: since each `__getitem__` opens its own memmap, no shared state exists between workers; add comment documenting this; write a quick `assert` check in `__init__` that each shard file is readable (no lock)
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T024 Add `requirements-data.txt` at repo root listing new dependencies: `pybloom-live>=4.0`, `mmh3>=3.0`, `datasets>=2.14`, `sentencepiece>=0.1.99`; update [quickstart.md](quickstart.md) install command to reference it
-- [ ] T025 Add token ID range guard inside `_tokenize_doc` in `scripts/prepare_data.py`: after `sp.EncodeAsIds`, iterate IDs and `raise ValueError(f"Token ID {id} out of range [0, {VOCAB_SIZE})")` if any ID >= VOCAB_SIZE; inner guard for early detection — outer batch-level check is in T010
+- [X] T024 Add `requirements-data.txt` at repo root listing new dependencies: `pybloom-live>=4.0`, `mmh3>=3.0`, `datasets>=2.14`, `sentencepiece>=0.1.99`; update [quickstart.md](quickstart.md) install command to reference it
+- [X] T025 Add token ID range guard inside `_tokenize_doc` in `scripts/prepare_data.py`: after `sp.EncodeAsIds`, iterate IDs and `raise ValueError(f"Token ID {id} out of range [0, {VOCAB_SIZE})")` if any ID >= VOCAB_SIZE; inner guard for early detection — outer batch-level check is in T010
 
 ---
 
@@ -97,12 +97,12 @@
 
 **Purpose**: Verify correctness of cleaning, dedup, tokenization, sharding, and resume. Covers SCs and plan.md Task Group 3.
 
-- [ ] T026 [P] Unit test `clean_document()` in `tests/test_prepare_data.py`: assert HTML tags stripped, NFC normalization applied, returns `None` for empty string short-circuit; covers FR-004
-- [ ] T027 [P] Unit test Bloom filter in `tests/test_prepare_data.py`: assert duplicate doc hash is detected on second call, Bloom checkpoint round-trips correctly via `pickle.dump`/`load`; covers FR-005
-- [ ] T028 [P] [US3] Unit test `ShardedDataset` in `tests/test_dataset.py`: assert shift invariant `target_ids[t] == input_ids[t+1]` for all `t < seq_len-1`; assert `ValueError` raised on missing shard, empty shard, and odd byte-size shard; covers FR-011, FR-012, SC-004
-- [ ] T029 Integration test in `tests/test_pipeline.py`: generate a synthetic 1,000-doc stream → run `run_pipeline` → confirm ≥1 shard written, token count > 0, manifest is valid JSON with correct `total_tokens`; covers plan task 3.4
-- [ ] T030 Resume test in `tests/test_pipeline.py`: run pipeline against synthetic stream until 1 shard completes, then interrupt (inject exception), restart → confirm final corpus is identical to an uninterrupted run (same shard checksum); covers SC-005, plan task 3.5
-- [ ] T031 [P] SC-006 spot-check script `tests/check_token_range.py`: given a shard directory, sample up to 100 random `.bin` files, load each as `np.fromfile(dtype=np.uint16)`, assert all values in `[0, VOCAB_SIZE)`, print pass/fail per shard; standalone — run manually after full corpus build; covers SC-006
+- [X] T026 [P] Unit test `clean_document()` in `tests/test_prepare_data.py`: assert HTML tags stripped, NFC normalization applied, returns `None` for empty string short-circuit; covers FR-004
+- [X] T027 [P] Unit test Bloom filter in `tests/test_prepare_data.py`: assert duplicate doc hash is detected on second call, Bloom checkpoint round-trips correctly via `pickle.dump`/`load`; covers FR-005
+- [X] T028 [P] [US3] Unit test `ShardedDataset` in `tests/test_dataset.py`: assert shift invariant `target_ids[t] == input_ids[t+1]` for all `t < seq_len-1`; assert `ValueError` raised on missing shard, empty shard, and odd byte-size shard; covers FR-011, FR-012, SC-004
+- [X] T029 Integration test in `tests/test_pipeline.py`: generate a synthetic 1,000-doc stream → run `run_pipeline` → confirm ≥1 shard written, token count > 0, manifest is valid JSON with correct `total_tokens`; covers plan task 3.4
+- [X] T030 Resume test in `tests/test_pipeline.py`: run pipeline against synthetic stream until 1 shard completes, then interrupt (inject exception), restart → confirm final corpus is identical to an uninterrupted run (same shard checksum); covers SC-005, plan task 3.5
+- [X] T031 [P] SC-006 spot-check script `tests/check_token_range.py`: given a shard directory, sample up to 100 random `.bin` files, load each as `np.fromfile(dtype=np.uint16)`, assert all values in `[0, VOCAB_SIZE)`, print pass/fail per shard; standalone — run manually after full corpus build; covers SC-006
 
 ---
 

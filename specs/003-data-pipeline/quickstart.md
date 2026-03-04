@@ -12,8 +12,10 @@
 3. Google Drive mounted at `/content/drive` (Colab) or Drive path configured
 
 ```bash
-# Install dependencies
-pip install datasets sentencepiece numpy pybloom-live mmh3 python-dotenv torch
+# Install dependencies (data pipeline)
+pip install -r requirements-data.txt
+# Core training dependencies
+pip install torch sentencepiece numpy
 ```
 
 ---
