@@ -10,6 +10,7 @@
 
 - Q: Should deduplication be applied per-source independently or across all sources combined? → A: Cross-source (global) deduplication using a memory-efficient Bloom filter — prioritises model accuracy by preventing any document appearing more than once regardless of source.
 - Q: Veri seti sürümleri için sabit bir versiyon mu kullanalım yoksa her çalıştırmada en güncel sürümü mü çekelim? → A: B — internette araştırılarak en güncel sabit sürümler belirlendi: Wikipedia `20231101.tr` (HuggingFace'teki tek dump), OSCAR `OSCAR-2301` config `tr` (Ocak 2023, erişim kısıtlı — HF hesabı onayı gerekir), mC4 `allenai/c4` config `tr` (versiyonsuz statik dataset). Sabit versiyonlar pin'lenip reproduce edilebilirlik sağlanacak.
+- Q: Shard tamamlanma tespiti nasıl yapılacak? → A: A — `shards_manifest.json` manifest dosyası; her tamamlanan shard kaydedilir, Bloom filter checkpoint referansı da bu dosyada tutulur. OSCAR erişim başvurusu yapıldı.
 
 ---
 
@@ -84,7 +85,7 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - **FR-005**: The pipeline MUST deduplicate documents **across all sources combined** using a Bloom filter on the MD5 hash of each document's cleaned text; duplicate documents are silently skipped regardless of which source they originate from. A Bloom filter MUST be used (not a plain hash set) to keep memory usage under 1 GB at 30B-token corpus scale.
 - **FR-006**: The pipeline MUST tokenise cleaned text using the trained BPE model at `tokenizer/turkish_bpe.model`, prepending BOS (`id=1`) and appending EOS (`id=2`) to each document
 - **FR-007**: Tokenised documents MUST be concatenated into a flat uint16 numpy array and written to binary shard files of approximately 1 GB each, named `shard_NNNN.bin`, in the configured output directory
-- **FR-008**: The pipeline MUST support resumable execution: on restart it detects existing complete shards and skips them, continuing from the next incomplete position
+- **FR-008**: The pipeline MUST support resumable execution via a `shards_manifest.json` file in the output directory. On each completed shard, the manifest is updated with the shard filename, token count, and source. On restart, the pipeline reads the manifest to skip already-completed shards, and the Bloom filter checkpoint path is also recorded in the manifest to allow resuming deduplication state.
 - **FR-009**: On completion the pipeline MUST print: number of shards written, total token count, token count per source, and total elapsed time
 - **FR-010**: Each completed shard MUST be validated (file size > 0, readable as uint16) before the next shard begins; corrupted shards are deleted and re-written
 - **FR-011**: `training/dataset.py` MUST implement `ShardedDataset(shard_paths, seq_len)` returning `(input_ids, target_ids)` pairs of shape `(seq_len,)` where `target_ids` is `input_ids` shifted left by one position
