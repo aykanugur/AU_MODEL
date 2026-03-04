@@ -31,11 +31,12 @@ SHUFFLE_INPUT = True
 # RANDOM_SEED is documented here for reference only — not passed to SPM.
 RANDOM_SEED = 42
 
-PAD_ID = 0
-UNK_ID = 1
-BOS_ID = 2
-EOS_ID = 3
-USER_DEFINED_SYMBOLS = "[SYSTEM],[USER],[ASSISTANT],[SEP]"
+PAD_ID = 0   # SPM default: -1 (disabled) — must override
+UNK_ID = 1   # SPM default: 0 — must override
+BOS_ID = 2   # SPM default: 1 — must override
+EOS_ID = 3   # SPM default: 2 — must override
+# user_defined_symbols → assigned IDs 4,5,6,7 in order
+USER_DEFINED_SYMBOLS = ["[SYSTEM]", "[USER]", "[ASSISTANT]", "[SEP]"]
 
 CORPUS_PATH = Path("data/raw/tokenizer_corpus.txt")
 MODEL_PREFIX = "tokenizer/turkish_bpe"
@@ -156,14 +157,11 @@ def run_spm_training(
         byte_fallback=BYTE_FALLBACK,
         input_sentence_size=INPUT_SENTENCE_SIZE,
         shuffle_input_sentence=SHUFFLE_INPUT,
-        # NOTE: sentencepiece does not expose an RNG seed in its Python API.
-        # Reproducibility is controlled by input_sentence_size + shuffle_input_sentence.
-        # seed_sentencepiece_size is the EM seed model SIZE (default 1M) — NOT a random seed.
-        pad_id=PAD_ID,
-        unk_id=UNK_ID,
-        bos_id=BOS_ID,
-        eos_id=EOS_ID,
-        user_defined_symbols=USER_DEFINED_SYMBOLS,
+        pad_id=PAD_ID,   # 0  (SPM default: -1 disabled — must override)
+        unk_id=UNK_ID,   # 1  (SPM default: 0)
+        bos_id=BOS_ID,   # 2  (SPM default: 1 — must override)
+        eos_id=EOS_ID,   # 3  (SPM default: 2 — must override)
+        user_defined_symbols=USER_DEFINED_SYMBOLS,  # ["[SYSTEM]","[USER]","[ASSISTANT]","[SEP]"] → IDs 4,5,6,7
     )
 
     print(f"[INFO] Model saved: {MODEL_FILE} [OK]")
