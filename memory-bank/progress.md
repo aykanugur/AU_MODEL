@@ -6,7 +6,7 @@
 
 ```
 Phase 0: Design & Planning          ████████████  COMPLETE
-Phase 1: Tokenizer                  ░░░░░░░░░░░░  NOT STARTED
+Phase 1: Tokenizer                  ████████████  COMPLETE
 Phase 2: Model Architecture         ░░░░░░░░░░░░  NOT STARTED
 Phase 3: Data Pipeline              ░░░░░░░░░░░░  NOT STARTED
 Phase 4: Pretraining                ░░░░░░░░░░░░  NOT STARTED
@@ -20,7 +20,7 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Architecture decision | ✅ Done | LLaMA-style, 1.3B |
+| Architecture decision | ✅ Done | LLaMA-style, 700M |
 | Hyperparameter selection | ✅ Done | Locked for H100 100hrs |
 | Project structure scaffolded | ✅ Done | All dirs + empty files |
 | DESIGN.md created | ✅ Done | Full pseudocode per module |
@@ -29,19 +29,23 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 
 ---
 
-## Phase 1: Tokenizer ⬜
+## Phase 1: Tokenizer ✅ COMPLETE
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Collect Turkish corpus for tokenizer training | ⬜ | Use Wikipedia dump first |
-| Implement `train_tokenizer.py` | ⬜ | See DESIGN.md §Phase 1 |
-| Train BPE tokenizer | ⬜ | Target: 32k vocab |
-| Validate Turkish fertility ratio | ⬜ | Target: 1.3–1.8 tok/word |
-| Confirm Turkish chars have native tokens | ⬜ | ç,ğ,ı,ö,ş,ü must not be byte-fallback |
-| Update special token IDs in `config.py` | ⬜ | After training |
+| Spec, plan, tasks (SpecKit) | ✅ Done | 13 tasks, all 5 phases |
+| `tokenizer/__init__.py` | ✅ Done | Re-exports `Tokenizer` class |
+| `data/raw/.gitkeep` | ✅ Done | Ensures `data/raw/` tracked in git |
+| `tokenizer/train_tokenizer.py` | ✅ Done | `download_corpus()`, `run_spm_training()`, `main()` CLI |
+| `tokenizer/validate_tokenizer.py` | ✅ Done | 4 checks: fertility, roundtrip, turkish_chars, special_tokens |
+| `tokenizer/tokenizer.py` | ✅ Done | `Tokenizer` class — stable downstream interface |
+| `colab/01_tokenizer.ipynb` | ✅ Done | 4-section notebook: install, download, train, validate |
+| **Download Turkish Wikipedia corpus** | ✅ Done | 429,010 docs, 889 MB |
+| **Train BPE tokenizer (64k vocab)** | ✅ Done | `turkish_bpe.model` + `turkish_bpe.vocab` |
+| **Validate trained model** | ✅ Done | fertility=1.52 [PASS], roundtrip 98/98 [PASS], turkish_chars 12/12 [PASS], special_tokens 8/8 [PASS] |
+| **Copy artifacts to Drive** | ✅ Done | `aumodel_checkpoints/tokenizer/` |
 
-**Entry criteria:** None  
-**Exit criteria:** Tokenizer trained, fertility validated, special token IDs known
+**Exit criteria:** ✅ All met — artifacts in Drive, validation exit code 0
 
 ---
 
@@ -140,6 +144,8 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 | Date | Milestone |
 |------|-----------|
 | 4 Mart 2026 | Project designed, scaffolded, memory bank created |
+| 4 Mart 2026 | SpecKit phases complete: specify → clarify → checklist → plan → tasks → analyze |
+| 4 Mart 2026 | Phase 1 code complete: all 13 tasks implemented (T001–T013) |
 
 ---
 
