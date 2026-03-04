@@ -88,7 +88,7 @@
 ### Implementation for User Story 3
 
 - [ ] T015 [P] [US3] Implement `Logger` class in training/trainer.py — try/except wandb import; check WANDB_API_KEY; `__init__(enabled, project, run_name)` calls wandb.init if available; `log(metrics: dict, step: int)` calls wandb.log or prints formatted line; `finish()` calls wandb.finish; graceful fallback to console-only on any wandb failure
-- [ ] T016 [US3] Implement validation loss pass in `train()` in training/trainer.py — every val_interval steps: load val shard via ShardedDataset, iterate with torch.no_grad(), compute mean CE loss across val batches, store in best_val_loss, pass val_loss to Logger; skip with warning if cfg.val_shard is None
+- [ ] T016 [US3] Implement validation loss pass in `train()` in training/trainer.py — every val_interval steps: instantiate `ShardedDataset([cfg.val_shard], cfg.seq_len)` (**list wrapping required** — ShardedDataset takes `shard_paths: list[str]`, not a bare string; passing `cfg.val_shard` directly causes TypeError), iterate with `torch.no_grad()`, compute mean CE loss across all batches in the shard, store in `best_val_loss`, pass `val_loss` to Logger; skip with `warnings.warn` if `cfg.val_shard is None`
 - [ ] T017 [US3] Replace basic console print in train() with full Logger log line in training/trainer.py — format: `step=N  loss=F  val_loss=F|-  lr=F  grad_norm=F  tok/s=F  mfu=F%  elapsed=Fs`; wire estimate_mfu() and elapsed time tracking; replace stub Logger with full Logger class from T015
 
 **Checkpoint**: US3 independently functional. Run `python -m pytest tests/test_trainer.py::test_logging tests/test_trainer.py::test_val_loss -v` — all pass.
