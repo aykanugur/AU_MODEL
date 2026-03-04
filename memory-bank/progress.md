@@ -8,8 +8,8 @@
 Phase 0: Design & Planning          ████████████  COMPLETE
 Phase 1: Tokenizer                  ████████████  COMPLETE
 Phase 2: Model Architecture         ████████████  COMPLETE
-Phase 3: Data Pipeline              ░░░░░░░░░░░░  NOT STARTED
-Phase 4: Pretraining                ░░░░░░░░░░░░  NOT STARTED
+Phase 3: Data Pipeline              ████████████  COMPLETE
+Phase 4: Pretraining (code)         ██████████▒▒  CODE DONE — H100 tests pending
 Phase 5: SFT (Instruction Tuning)   ░░░░░░░░░░░░  NOT STARTED
 Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT STARTED
 ```
@@ -75,37 +75,39 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 
 ---
 
-## Phase 3: Data Pipeline ⬜
+## Phase 3: Data Pipeline ✅ COMPLETE
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Download Turkish Wikipedia | ⬜ | ~1GB |
-| Download OSCAR 23.01 Turkish | ⬜ | ~50GB streaming |
-| Download mC4 Turkish | ⬜ | ~100GB streaming |
-| Implement `scripts/prepare_data.py` | ⬜ | Clean + tokenize + shard |
-| Run data pipeline | ⬜ | Target: 30B+ tokens |
-| Validate shards | ⬜ | Check token count, no corruption |
+| Download Turkish Wikipedia | ✅ Done | 429,010 docs |
+| Download OSCAR 23.01 Turkish | ✅ Done | streaming |
+| Download mC4 Turkish | ✅ Done | streaming |
+| Implement `scripts/prepare_data.py` | ✅ Done | clean + tokenize + shard |
+| Run data pipeline | ✅ Done | 30B+ tokens |
+| Validate shards | ✅ Done | ≥ 1500 shards |
 
-**Entry criteria:** Tokenizer trained  
-**Exit criteria:** data/processed/ has ≥ 1500 shards (≥30B tokens)
+**Exit criteria:** ✅ All met — ≥1500 shards in Drive
 
 ---
 
-## Phase 4: Pretraining ⬜
+## Phase 4: Pretraining ▙ CODE COMPLETE — H100 run pending
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Implement `training/dataset.py` | ⬜ | Shard streaming DataLoader |
-| Implement `training/lr_scheduler.py` | ⬜ | Cosine + warmup |
-| Implement `training/checkpoint.py` | ⬜ | Save/resume |
-| Implement `training/trainer.py` | ⬜ | Full training loop |
-| Implement `scripts/run_training.py` | ⬜ | CLI entry point |
-| Set up Colab notebook `02_pretrain.ipynb` | ⬜ | |
-| Run training — 100 hours | ⬜ | Target: 32B tokens |
-| Monitor loss curve | ⬜ | Should decrease smoothly |
-| Save final checkpoint | ⬜ | |
+| `training/dataset.py` (ShardedDataset) | ✅ Done | Epic 3 — map-style Dataset |
+| `training/lr_scheduler.py` (get_lr) | ✅ Done | T002; 14/14 tests PASS |
+| `training/checkpoint.py` (save/rotate/load) | ✅ Done | T005+T012; 12/12 tests PASS |
+| `training/trainer.py` (TrainingConfig, InterleavedShardLoader, train) | ✅ Done | T004+T006–T008+T013+T015–T017 |
+| `colab/02_pretrain.ipynb` | ✅ Done | T018; 7 cells, auto-resume |
+| `training/__init__.py` exports | ✅ Done | T019 |
+| test_lr_scheduler.py | ✅ 14/14 PASS | Local CPU |
+| test_checkpoint.py | ✅ 12/12 PASS | Local CPU |
+| test_trainer.py (smoke/resume/logging/val) | ⏳ Written | Needs H100 to run |
+| SC-002: MFU ≥35%, throughput ≥100k tok/s | ⏳ Pending | Manual H100 verification |
+| SC-008: VRAM ≥70 GB at micro_batch_size=32 | ⏳ Pending | Manual H100 verification |
+| Run training — 100 hours | ░ Not started | After H100 tests pass |
 
-**Entry criteria:** Data pipeline complete, model architecture verified  
+**Entry criteria:** ✅ Data pipeline complete, model architecture verified
 **Exit criteria:** 32B tokens processed, loss ≈ 2.5–3.0, checkpoint saved
 
 ---
@@ -153,6 +155,8 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 | 4 Mart 2026 | SpecKit phases complete: specify → clarify → checklist → plan → tasks → analyze |
 | 4 Mart 2026 | Phase 1 complete: tokenizer trained (64k BPE), validated, artifacts saved to Drive |
 | 4 Mart 2026 | Phase 2 complete: AUModel ~749.5M params implemented; sanity_check exits 0; SC-002 CPU benchmark 5.98s |
+| 4 Mart 2026 | Phase 3 complete: data pipeline implemented; 30B+ tokens sharded to Drive |
+| 5 Mart 2026 | Phase 4 code complete: full training loop T001–T019 committed (`fd8d21a`); lr_scheduler 14/14, checkpoint 12/12; trainer tests written and ready for H100 |
 
 ---
 
