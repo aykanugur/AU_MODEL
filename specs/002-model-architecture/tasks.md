@@ -17,7 +17,7 @@
 **Purpose**: Create the `model/` package skeleton and `colab/` directory so all downstream tasks have a home.
 
 - [ ] T001 Create `model/` package with empty `model/__init__.py` and `colab/` directory
-- [ ] T002 [P] Add `model/` module to `.gitignore` exclusions audit — confirm no `__pycache__` tracked
+- [ ] T002 Add `model/` module to `.gitignore` exclusions audit — confirm no `__pycache__` tracked (depends on T001)
 
 **Checkpoint**: `model/` and `colab/` directories exist; `python -c "import model"` executes without ImportError (empty package).
 
@@ -30,7 +30,7 @@
 **⚠️ CRITICAL**: Attention, FeedForward, and AUModel ALL depend on these three modules.
 
 - [ ] T003 Implement `ModelConfig` dataclass with `__post_init__` validation (`num_heads % num_kv_heads == 0` → `ValueError`) in `model/config.py`
-- [ ] T004 [P] Implement RoPE frequency precomputation (`torch.polar` complex rotation, `register_buffer("freqs_cis", ...)`, shape `(max_seq_len, head_dim//2)` complex64) in `model/rope.py`
+- [ ] T004 [P] Implement `compute_freqs_cis(seq_len: int, head_dim: int, theta: float) -> torch.Tensor` pure function (returns complex64 `(seq_len, head_dim//2)` via `torch.polar`; no `nn.Module`, no `register_buffer`) in `model/rope.py`
 - [ ] T005 [P] Implement `RMSNorm` layer (forward: `x / sqrt(mean(x²)+1e-6) * weight`, learnable `weight (d_model,)`) in `model/transformer.py`
 
 **Checkpoint**: Foundation ready — all three modules importable. `ModelConfig()` raises `ValueError` on bad GQA ratio. `compute_freqs_cis(128, 64)` returns complex64 tensor of shape `(128, 64)`.
@@ -48,7 +48,7 @@
 - [ ] T006 [P] [US1] Implement `FeedForward` module (SwiGLU: `W2(SiLU(W1(x)) * W3(x))`, all `nn.Linear` with `bias=False`, hidden=4352) in `model/feedforward.py`
 - [ ] T007 [P] [US1] Implement `Attention` module (GQA via `repeat_interleave(groups, dim=2)`, apply RoPE via complex view-multiply, `F.scaled_dot_product_attention(is_causal=True)`, `past_kv=None` parameter returning `(out, None)` or `(out, (new_k, new_v))`) in `model/attention.py`
 - [ ] T008 [US1] Implement `TransformerBlock` (pre-norm pattern: `x = x + attn(norm1(x), freqs_cis)` → `x = x + ffn(norm2(x))`) in `model/transformer.py`
-- [ ] T009 [US1] Implement `AUModel` (`nn.Embedding(64000, 1536)`, 24 `TransformerBlock`s, final `RMSNorm`, `nn.Linear(1536, 64000, bias=False)` LM head, weight tying `lm_head.weight = embed.weight`, `freqs_cis` buffer, `forward(tokens, targets=None)` returning `(logits, loss|None)`, `get_num_params()`) in `model/transformer.py`
+- [ ] T009 [US1] Implement `AUModel` (`nn.Embedding(64000, 1536)`, 24 `TransformerBlock`s, final `RMSNorm`, `nn.Linear(1536, 64000, bias=False)` LM head, weight tying `lm_head.weight = embed.weight`, call `self.register_buffer("freqs_cis", compute_freqs_cis(...))` in `__init__`, `forward(tokens: torch.Tensor, targets: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor | None]` with guard `if tokens.shape[1] > self.config.max_seq_len: raise ValueError(f"seq_len {tokens.shape[1]} exceeds max_seq_len {self.config.max_seq_len}")` before embed, returning `(logits, loss|None)`, `get_num_params() -> int`) in `model/transformer.py`
 - [ ] T010 [US1] Wire public exports in `model/__init__.py` (`from .transformer import AUModel; from .config import ModelConfig; __all__ = ["AUModel", "ModelConfig"]`)
 
 **Checkpoint**: US1 fully functional. `AUModel(ModelConfig())` instantiates in < 30s. Forward pass on `(2, 128)` returns `(2, 128, 64000)`. `model.get_num_params()` returns value between 680M–720M. Bad GQA config raises `ValueError`.
@@ -63,7 +63,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T011 [US2] Implement `model/sanity_check.py` CLI script with 4 sequential checks: (1) import+instantiate `AUModel(ModelConfig())`, (2) forward shape check `(2,128) → (2,128,64000)`, (3) param count in [680M, 720M] via `get_num_params()`, (4) initial loss check: mean cross-entropy on 10 random batches ∈ [10.0, 11.0]; print `[PASS]`/`[FAIL]` per check; `sys.exit(0)` on all pass, `sys.exit(1)` on any failure
+- [ ] T011 [US2] Implement `model/sanity_check.py` CLI script with 4 sequential checks: (1) import+instantiate `AUModel(ModelConfig())`, (2) forward shape check `(2,128) → (2,128,64000)`, (3) param count in [680M, 720M] via `get_num_params()`, (4) initial loss check: mean cross-entropy on 10 random batches ∈ [10.0, 11.0]; print `[PASS]`/`[FAIL]` per check; `sys.exit(0)` on all pass, `sys.exit(1)` on any failure. **Constitution**: use `if/raise ValueError(...)` NOT `assert` anywhere in this file
 
 **Checkpoint**: `python model/sanity_check.py` exits with code 0, all 4 lines print `[PASS]`. Satisfies FR-015 and SC-006.
 
@@ -87,8 +87,9 @@
 
 **Purpose**: Final verification and memory-bank update.
 
-- [ ] T013 Run `python model/sanity_check.py` in a clean Python environment (only PyTorch installed) and confirm it exits 0 — validates SC-006 independence
+- [ ] T013 Run `python model/sanity_check.py` in a clean Python environment (only PyTorch installed) and confirm it exits 0 — validates SC-006 independence; additionally time a forward pass on batch `(8, 512)` and confirm it completes in < 10s on >=8-core CPU (SC-002)
 - [ ] T014 [P] Update `memory-bank/progress.md` to mark Epic 2 (model architecture) as ✅ complete with implementation date 2026-03-04
+- [ ] T015 [P] Add type annotations to all public function and method signatures across `model/config.py`, `model/rope.py`, `model/attention.py`, `model/feedforward.py`, `model/transformer.py`, `model/sanity_check.py` (constitution MUST: "type hints on all function signatures")
 
 ---
 
@@ -101,12 +102,12 @@
 - **Phase 3 (US1)**: Depends on Phase 2 completion. T006 and T007 are parallel; T008 depends on T006+T007; T009 depends on T008; T010 depends on T009
 - **Phase 4 (US2)**: Depends on Phase 3 completion (needs `AUModel.forward(tokens, targets)` working)
 - **Phase 5 (US3)**: Depends on Phase 4 (sanity_check.py provides the overfit baseline)
-- **Phase 6 (Polish)**: Depends on all desired stories complete
+- **Phase 6 (Polish)**: Depends on all desired stories complete. T013, T014, T015 are parallel within this phase.
 
 ### User Story Dependencies
 
 ```
-T001 → T002
+T001 → T002 (sequential: T002 audits what T001 creates)
          ↓
 T003 + T004 + T005  (foundational, parallelizable)
          ↓
@@ -122,14 +123,15 @@ T011  (needs T010 — forward with targets)
          ↓
 T012  (needs T011 — sanity check as reference)
          ↓
-T013 + T014  (parallel, polish)
+T013 + T014 + T015  (parallel, polish)
 ```
 
 ### Within Each User Story
 
 - T006 (FeedForward) and T007 (Attention) are parallel — different files
-- T003 (ModelConfig), T004 (RoPE), T005 (RMSNorm) are parallel — different scopes
-- T013 and T014 are parallel — different files
+- T003 (ModelConfig), T004 (RoPE pure function), T005 (RMSNorm) are parallel — different scopes
+- T004 provides `compute_freqs_cis()` used by T009 (`AUModel.__init__` calls `self.register_buffer(..., compute_freqs_cis(...))`)
+- T013, T014, and T015 are parallel — different concerns
 
 ---
 
@@ -138,8 +140,8 @@ T013 + T014  (parallel, polish)
 ### Phase 2: Foundational (3-way parallel)
 
 ```text
-T003: model/config.py   — ModelConfig dataclass + validation
-T004: model/rope.py     — torch.polar RoPE precomputation
+T003: model/config.py       — ModelConfig dataclass + validation
+T004: model/rope.py         — compute_freqs_cis() pure function (no nn.Module)
 T005: model/transformer.py  — RMSNorm class only
 ```
 
@@ -168,6 +170,7 @@ T007: model/attention.py    — Attention (GQA + RoPE + SDPA)
 1. **After T010**: Working model importable with correct shapes → Epic 4 can begin integration testing
 2. **After T011**: `sanity_check.py` provides CI-ready verification → run in every future Epic
 3. **After T012**: Colab notebook enables GPU validation before 100-hour pretraining
+4. **After T015**: All public signatures type-annotated → constitution compliance confirmed
 
 ### Key Architectural Constraints (from research.md — do not deviate)
 
