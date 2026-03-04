@@ -16,7 +16,7 @@
 
 **Purpose**: Create the synthetic test fixture needed by all test phases.
 
-- [ ] T001 Create synthetic test fixture shard in tests/fixtures/data/wikipedia/shard_00000.bin (uint16 numpy array, ~100k tokens, values in [0, 64000))
+- [ ] T001 Create synthetic test fixture shard in tests/fixtures/data/wikipedia/shard_00000.bin — generate as `np.random.randint(0, 64000, size=(100_352,), dtype=np.uint16)` (explicitly random-uniform so SC-001 initial-loss test computes ≈ ln(64000) ≈ 11.07; a constant-token fixture would produce loss ≈ 0); save with `arr.tofile(path)`
 
 ---
 
@@ -44,12 +44,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Implement `TrainingConfig` dataclass + `parse_args()` CLI in training/trainer.py — all fields from data-model.md (micro_batch_size=32, grad_accum_steps=4, seq_len=4096, max_steps=100000, warmup_steps=2000, max_lr=3e-4, min_lr=3e-5, beta1=0.9, beta2=0.95, eps=1e-8, weight_decay=0.1, grad_clip=1.0, log_interval=10, checkpoint_interval=1000, checkpoint_keep=10, val_interval=1000, use_wandb=True, gradient_checkpointing=False); validate micro_batch_size×grad_accum_steps==128; full type hints; raise ValueError for invalid config
+- [ ] T004 [US1] Implement `TrainingConfig` dataclass + `parse_args()` CLI in training/trainer.py — all fields from data-model.md (micro_batch_size=32, grad_accum_steps=4, seq_len=4096, max_steps=100000, warmup_steps=2000, max_lr=3e-4, min_lr=3e-5, beta1=0.9, beta2=0.95, eps=1e-8, weight_decay=0.1, grad_clip=1.0, log_interval=10, checkpoint_interval=1000, checkpoint_keep=10, val_interval=1000, use_wandb=True, gradient_checkpointing=False); emit `warnings.warn` (NOT ValueError) when `micro_batch_size × grad_accum_steps ≠ 128` — this preserves test configs (e.g. 2×2=4) while flagging non-H100 defaults; raise ValueError only for clearly invalid fields (micro_batch_size<1, grad_accum_steps<1, max_lr≤min_lr, warmup_steps≥max_steps); full type hints
 - [ ] T005 [P] [US1] Implement `save_checkpoint(path, state)` with atomic write (write to .tmp then os.rename) in training/checkpoint.py — state dict includes model_state, optimizer_state, step, config, loader_state, best_val_loss, created_at; full type hints
 - [ ] T006 [US1] Implement `SourceState` dataclass + `InterleavedShardLoader(IterableDataset)` in training/trainer.py — weighted-random source selection, infinite cycling with per-cycle reshuffle (seed=base_seed+cycle×1000), per-source shard_idx/sample_idx/cycle_count tracking, state_dict()/load_state_dict() methods for resume; wraps `ShardedDataset` from training/dataset.py; default weights: wikipedia=0.20, oscar=0.30, mc4=0.30, cc100=0.20
 - [ ] T007 [US1] Implement `estimate_mfu(tokens_per_sec, model_params, seq_len, peak_flops, num_layers, num_heads, d_model) -> float` in training/trainer.py — formula: `(6×N + 12×L×T×H×d_head) × tokens_per_sec / peak_flops`; defaults: model_params=749_544_960, seq_len=4096, peak_flops=989e12, num_layers=24, num_heads=12, d_model=1536
-- [ ] T008 [US1] Implement core `train(cfg: TrainingConfig) -> None` in training/trainer.py — device setup (cuda:0 or cpu), TF32 flags, SDPA backend flags (enable_flash_sdp/enable_mem_efficient_sdp), model = AUModel(ModelConfig()) loaded and compiled with torch.compile, AdamW optimiser, BF16 autocast context for forward+loss, grad accum loop (loss /= grad_accum_steps per micro-step), grad clip max_norm=1.0, LR scheduler step each optimiser update, `save_checkpoint` call every checkpoint_interval steps, basic console print of step+loss+lr; gradient_checkpointing applied if cfg.gradient_checkpointing; __main__ entry point calling parse_args()+train()
-- [ ] T009 [US1] Write tests/test_trainer.py — smoke test: run train() for 50 steps with micro_batch_size=2, grad_accum_steps=2, seq_len=64, fixture shard, no_wandb, confirm exit code 0 and checkpoint file created (SC-004); initial loss test: assert step-1 loss ∈ [10.5, 11.6] confirming correct init (SC-001)
+- [ ] T008 [US1] Implement core `train(cfg: TrainingConfig) -> None` in training/trainer.py — device setup (cuda:0 or cpu), TF32 flags, SDPA backend flags (enable_flash_sdp/enable_mem_efficient_sdp), model = AUModel(ModelConfig()) loaded and compiled with torch.compile, AdamW optimiser, BF16 autocast context for forward+loss, compute loss via `F.cross_entropy(logits.view(-1, vocab_size), targets.view(-1))` (no ignore_index — all tokens active in pretraining), grad accum loop (loss /= grad_accum_steps per micro-step), grad clip max_norm=1.0, LR scheduler step each optimiser update, `save_checkpoint` call every checkpoint_interval steps, basic console print of step+loss+lr; gradient_checkpointing applied if cfg.gradient_checkpointing; __main__ entry point calling parse_args()+train()
+- [ ] T009 [US1] Write tests/test_trainer.py — smoke test: run train() for 50 steps with micro_batch_size=2, grad_accum_steps=2, seq_len=64, fixture shard, no_wandb, confirm exit code 0 and checkpoint file created (SC-004); initial loss test: assert step-1 loss ∈ [10.5, 11.6] confirming correct init (SC-001); `estimate_mfu` unit test: `assert estimate_mfu(0.0) == 0.0`, `assert 0.10 <= estimate_mfu(100_000) <= 0.70` (hardware-agnostic sanity range — catches wrong formula constants without requiring H100)
 
 **Checkpoint**: US1 independently functional. Run `python -m pytest tests/test_lr_scheduler.py tests/test_trainer.py::test_smoke tests/test_trainer.py::test_initial_loss -v` — all pass.
 
@@ -63,7 +63,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T010 [P] [US2] Write tests/test_checkpoint.py — SC-006: save checkpoint, reload with `load_latest_checkpoint`, assert model produces identical logits for same input; rotate test: save 11 checkpoints, assert only 10 remain and the oldest (step_00001) is deleted
+- [ ] T010 [P] [US2] Write tests/test_checkpoint.py — SC-006: save checkpoint, reload with `load_latest_checkpoint`, assert model produces identical logits for same input; rotate test: save 11 checkpoints, assert only 10 remain and the oldest (step_00001) is deleted; loader state test: capture `loader.state_dict()` before `save_checkpoint`, reload via `load_latest_checkpoint`, assert restored loader state equals captured state field-by-field (shard_idx, sample_idx, cycle_count) — confirms no token repetition on resume
 - [ ] T011 [P] [US2] Add `test_resume` to tests/test_trainer.py — run 20 steps, record final loss; restart with same output_dir, assert first logged step is 21, assert loss at step 21 is within 0.01 of non-interrupted baseline (SC-003)
 
 ### Implementation for User Story 2
@@ -83,7 +83,7 @@
 
 ### Tests for User Story 3
 
-- [ ] T014 [P] [US3] Add `test_logging` and `test_val_loss` to tests/test_trainer.py — log test: run 20 steps with log_interval=5, capture stdout, assert exactly 4 lines containing all 6 fields (step / loss / val_loss / lr / grad_norm / tok_s / mfu); MFU non-NaN; val_loss test: attach a val shard, run 1000 steps (or mock), assert val_loss logged and finite with |val_loss − train_loss| < 2.0 (SC-007)
+- [ ] T014 [P] [US3] Add `test_logging` and `test_val_loss` to tests/test_trainer.py — log test: run 20 steps with log_interval=5, capture stdout, assert exactly 4 lines each containing all **7 fields** (step, loss, val_loss, lr, grad_norm, tok/s, mfu); in this log-format test assert `val_loss=-` (dash, not numeric) because val_interval defaults to 1000 and will not fire within 20 steps; assert mfu is finite and >0; val_loss test: use val_interval=10 (or mock the validation call), run enough steps to trigger it, assert val_loss is a finite float and |val_loss − train_loss| < 2.0 (SC-007)
 
 ### Implementation for User Story 3
 
@@ -112,7 +112,7 @@
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T019 [P] Update training/__init__.py to export `TrainingConfig` and `get_lr` for downstream use in SFT epic
-- [ ] T020 Run full test suite `python -m pytest tests/test_lr_scheduler.py tests/test_checkpoint.py tests/test_trainer.py -v` and confirm all SCs pass: SC-001 (init loss), SC-003 (resume delta), SC-004 (smoke 5min), SC-005 (LR boundaries), SC-006 (checkpoint round-trip), SC-007 (val_loss finite); fix any failures
+- [ ] T020 Run full test suite `python -m pytest tests/test_lr_scheduler.py tests/test_checkpoint.py tests/test_trainer.py -v` and confirm all automated SCs pass: SC-001 (init loss), SC-003 (resume delta), SC-004 (smoke 5min), SC-005 (LR boundaries), SC-006 (checkpoint round-trip + loader state), SC-007 (val_loss finite); fix any failures; **manual verification on H100 required for**: SC-002 (MFU ≥35%, throughput ≥100k tok/s) and SC-008 (VRAM ≥70 GB with micro_batch_size=32) — document results in a comment in this task after the Colab run
 
 ---
 

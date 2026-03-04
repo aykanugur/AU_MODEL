@@ -102,3 +102,4 @@ To change any MUST in this constitution:
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-03-04 | Initial constitution written | Governance formalization pre-implementation |
+| 2026-03-04 | Corrected total params 700,317,696 → 749,544,960 | Epic 2 `model/sanity_check.py` verified exact count; original "~700M" was a pre-architecture rounding estimate; all downstream artifacts (research.md, data-model.md, tasks.md T007) correctly use 749,544,960 |

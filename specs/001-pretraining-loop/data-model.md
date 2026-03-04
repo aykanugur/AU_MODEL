@@ -42,7 +42,8 @@ Immutable configuration object assembled at startup from CLI arguments and proje
 ```
 
 **Validation rules**:
-- `micro_batch_size × grad_accum_steps` MUST equal 128 (effective batch invariant)
+- `micro_batch_size × grad_accum_steps` SHOULD equal 128 (H100 80 GB default); if ≠ 128, emit `warnings.warn(f"Effective batch {micro_batch_size*grad_accum_steps} ≠ 128 (H100 default)")` but do NOT raise — this allows reduced test configs (e.g. 2×2=4) without crashing the test suite
+- `micro_batch_size ≥ 1` and `grad_accum_steps ≥ 1` — raise `ValueError` if violated
 - `max_lr > min_lr > 0`
 - `warmup_steps < max_steps`
 - `log_interval ≤ checkpoint_interval`
