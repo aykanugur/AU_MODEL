@@ -86,7 +86,7 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 ### Functional Requirements
 
 - **FR-001**: The training loop MUST process tokens in fixed-length windows of `max_seq_len` (4096) tokens, assembling input and target sequences as a one-position shift.
-- **FR-002**: The training loop MUST accumulate gradients over exactly `grad_accum_steps` (16) micro-steps before each optimiser update, dividing loss by `grad_accum_steps` at each micro-step.
+- **FR-002**: The training loop MUST accumulate gradients over exactly `grad_accum_steps` micro-steps before each optimiser update, dividing loss by `grad_accum_steps` at each micro-step. The default configuration for an 80 GB GPU MUST use `micro_batch_size=32` and `grad_accum_steps=4`, keeping the effective batch size at 128 sequences × 4096 tokens.
 - **FR-003**: The training loop MUST clip the global gradient norm to `max_norm=1.0` before each optimiser update.
 - **FR-004**: The learning-rate scheduler MUST implement linear warm-up from 0 to `max_lr=3e-4` over the first 2000 steps, followed by cosine decay to `min_lr=3e-5` over `max_steps=100,000` steps, then hold at `min_lr`.
 - **FR-005**: The trainer MUST use BF16 mixed precision for the forward pass; FP16 is not permitted.
@@ -101,10 +101,11 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 - **FR-014**: The trainer MUST accept `--shard-dir` and `--output-dir` as CLI arguments specifying shard source and checkpoint destination.
 - **FR-015**: The trainer MUST target a single GPU (cuda:0); multi-GPU (DDP/FSDP) is explicitly out of scope for this epic.
 - **FR-016**: The trainer MUST compute and log a validation loss every 1000 steps using a dedicated held-out validation shard; the validation pass MUST run with gradients disabled and MUST NOT affect model weights or optimiser state.
+- **FR-017**: The default training configuration MUST target peak VRAM utilisation of ≥70 GB on an 80 GB GPU. The trainer MUST expose a `--gradient-checkpointing` flag that, when enabled, trades compute for memory to allow larger micro-batch sizes on lower-VRAM devices.
 
 ### Key Entities
 
-- **TrainingConfig**: Encapsulates all hyperparameters — `max_steps`, `warmup_steps`, `max_lr`, `min_lr`, `weight_decay`, `beta1`, `beta2`, `grad_accum_steps`, `batch_size`, `seq_len`, `log_interval`, `checkpoint_interval`, `output_dir`, `shard_dir`, `wandb_project`.
+- **TrainingConfig**: Encapsulates all hyperparameters — `max_steps`, `warmup_steps`, `max_lr`, `min_lr`, `weight_decay`, `beta1`, `beta2`, `micro_batch_size` (default: 32), `grad_accum_steps` (default: 4, effective batch = 128), `seq_len`, `log_interval`, `checkpoint_interval`, `checkpoint_keep` (default: 10), `output_dir`, `shard_dir`, `val_shard`, `wandb_project`, `gradient_checkpointing` (default: False).
 - **Checkpoint**: Snapshot of training state — model weights, optimiser state, step number, training config. One file per checkpoint interval.
 - **TrainingMetrics**: Per-step observable state — `step`, `loss`, `lr`, `tokens_per_sec`, `mfu`, `grad_norm`.
 - **LRSchedule**: Function mapping `step → learning_rate` under the cosine-with-warmup rule.
@@ -115,6 +116,7 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 
 - **SC-001**: Training loss at step 1 is within ±0.5 of ln(vocab_size) ≈ 11.07, confirming correct model initialisation.
 - **SC-002**: Training throughput on the target accelerator reaches at least 100,000 tokens per second with model-flops utilisation ≥ 35%, confirming hardware is not being wasted.
+- **SC-008**: Peak VRAM consumption during a training step with `micro_batch_size=32` and `seq_len=4096` on an 80 GB GPU must be ≥70 GB, confirming the GPU memory budget is being effectively utilised.
 - **SC-003**: After interrupting and resuming from a checkpoint at step N, the training loss at step N+1 differs from the non-interrupted baseline by less than 0.01.
 - **SC-004**: A 50-step smoke-test run with a synthetic shard completes in under 5 minutes on a local CPU without raising any exception.
 - **SC-005**: The LR scheduler returns `max_lr` at exactly step 2000 and `min_lr` at `max_steps`, verified by a unit test covering all three regions (warmup, decay, hold).
@@ -130,6 +132,7 @@ A researcher opens `colab/02_pretrain.ipynb` on a fresh H100 Colab session. Runn
 - Q: Kontrol noktası saklama politikası ne olmalı? → A: Son 10 checkpoint sakla, en eskisini sil.
 - Q: `grad_norm` her log satırında raporlanmalı mı? → A: Evet — klip öncesi ham gradient norm her log olayında raporlanmalı.
 - Q: Shard sırası sabit mi yoksa karıştırılsın mı? → A: Her epoch başında shard listesi karıştırılsın; ayrıca farklı kaynaklara ait shardlar (Wikipedia, OSCAR vb.) sıralı değil, birbiriyle iç içe geçmiş (interleaved) şekilde sunulmalı — böylece model küçük olduğundan dolayı önceki kaynaklarda öğrenilenlerin unutulması (catastrophic forgetting) engellenmiş olur.
+- Q: Hedef GPU VRAM kapasitesi ne kadar, en az ne kadar kullanılmalı? → A: 80 GB VRAM (H100 SXM5); eğitim sırasında en az 70 GB VRAM kullanılmalı. Buna göre micro-batch boyutu 32 sekans, gradient accumulation adımı 4 (efektif batch 128 sekans — sabit) olarak ayarlanmalı; aktivasyon kontrol noktası (gradient checkpointing) opsiyonel olarak desteklenmeli.
 
 ## Assumptions
 
