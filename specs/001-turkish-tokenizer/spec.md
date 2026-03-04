@@ -59,29 +59,32 @@ The data pipeline and model architecture components need a stable, well-defined 
 - What happens when the input text is an empty string? Encoding must not crash; decoding an empty list must return an empty string.
 - What happens when the input contains numerals, punctuation, or mixed Turkish/Latin scripts? The tokenizer must handle all Unicode without errors.
 - What happens when a document in the training corpus is extremely short (< 200 characters)? It must be silently skipped, not produce a training error.
-- What happens if the OSCAR dataset is temporarily unavailable during corpus download? The pipeline must continue with Wikipedia-only data and log a warning.
+- What happens if a configured corpus source is temporarily unavailable during download? The pipeline must log a warning and continue with whatever data has already been collected; it MUST NOT silently produce a corrupt or empty corpus file.
 - What happens when two special tokens have conflicting IDs? The training configuration must prevent ID collisions between pad, unk, bos, and eos.
+- What happens when the fertility check fails (ratio > 1.4)? The pipeline MUST halt immediately, log the measured ratio, and print a remediation hint (e.g., "increase corpus size or reduce vocab_size"). No automatic retry occurs — the developer must decide the next action.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The system MUST produce a tokenizer trained exclusively on Turkish text — no pre-existing English or multilingual tokenizer may be reused or adapted.
+- **FR-001b**: The training pipeline MUST write its outputs to exactly two fixed paths: `tokenizer/turkish_bpe.model` (binary model) and `tokenizer/turkish_bpe.vocab` (human-readable vocabulary list).
 - **FR-002**: The vocabulary MUST contain exactly 64,000 entries.
 - **FR-003**: The tokenizer MUST assign dedicated vocabulary entries to all 12 essential Turkish characters (ç, ğ, ı, İ, ö, ş, ü, Ü, Ö, Ç, Ğ, Ş) — none may fall back to byte-level representation.
 - **FR-004**: Encoding followed by decoding MUST reproduce the exact original input for any valid Turkish Unicode string.
 - **FR-005**: The average tokens-per-word ratio on a 10,000-sentence Turkish evaluation set MUST be ≤ 1.4.
 - **FR-006**: The tokenizer MUST reserve fixed IDs for four base special tokens: padding (ID 0), unknown (ID 1), beginning-of-sequence (ID 2), end-of-sequence (ID 3).
 - **FR-007**: The tokenizer MUST include dedicated vocabulary entries for four chat control tokens: system-role marker, user-role marker, assistant-role marker, and turn separator.
-- **FR-008**: The training corpus MUST be sourced from Turkish Wikipedia and the OSCAR 23.01 Turkish subset, with NFC Unicode normalization applied to every document.
+- **FR-008**: The training corpus MUST consist of Turkish plain text with NFC Unicode normalization applied to every document. The default starting source is the Turkish Wikipedia dump (20231101.tr); additional sources (e.g., OSCAR, mC4) MAY be added at the developer's discretion before training, and the pipeline MUST accept any plain-text file as input without requiring a specific dataset.
 - **FR-009**: Documents shorter than 200 characters MUST be excluded from the training corpus.
 - **FR-010**: The tokenizer MUST be accessible through a stable wrapper interface providing at minimum: encode, decode, vocabulary size query, and special token ID query.
+- **FR-011**: If the post-training fertility check fails (measured ratio > 1.4), the validation pipeline MUST halt with a non-zero exit code, log the exact measured ratio, and emit a human-readable remediation hint. It MUST NOT silently continue or auto-retry.
 
 ### Key Entities
 
-- **Tokenizer Model**: The trained artifact that maps Turkish text to integer sequences. Key attributes: vocabulary size (64,000), model type (subword BPE), language (Turkish-native). Produced once; consumed by model architecture, data pipeline, and inference.
-- **Vocabulary**: The complete list of 64,000 subword pieces with their integer IDs. Includes base language pieces, Turkish character entries, special tokens, and chat control tokens.
-- **Training Corpus**: The plain-text Turkish document collection used to learn vocabulary statistics. Sourced from Turkish Wikipedia and OSCAR 23.01 Turkish; NFC-normalized; short documents excluded.
+- **Tokenizer Model**: The trained artifact that maps Turkish text to integer sequences. Key attributes: vocabulary size (64,000), model type (subword BPE), language (Turkish-native). Output path: `tokenizer/turkish_bpe.model`. Produced once; consumed by model architecture, data pipeline, and inference.
+- **Vocabulary**: The complete list of 64,000 subword pieces with their integer IDs. Output path: `tokenizer/turkish_bpe.vocab`. Includes base language pieces, Turkish character entries, special tokens, and chat control tokens.
+- **Training Corpus**: The plain-text Turkish document collection used to learn vocabulary statistics. Default source: Turkish Wikipedia dump (20231101.tr). Additional sources are at developer discretion. All documents are NFC-normalized; short documents excluded.
 - **Special Tokens**: A fixed set of control tokens with reserved IDs used to structure model input: PAD (0), UNK (1), BOS (2), EOS (3), plus four chat role tokens with IDs assigned at training time.
 - **Tokenizer Wrapper**: A stable interface component that other pipeline stages use to interact with the trained model. Hides all implementation details from callers.
 
@@ -89,7 +92,7 @@ The data pipeline and model architecture components need a stable, well-defined 
 
 ### Measurable Outcomes
 
-- **SC-001**: Tokenizer model file and vocabulary file exist and load without errors after training completes.
+- **SC-001**: Tokenizer model file exists at `tokenizer/turkish_bpe.model` and vocabulary file exists at `tokenizer/turkish_bpe.vocab` — both load without errors after training completes.
 - **SC-002**: Vocabulary contains exactly 64,000 entries — no more, no fewer.
 - **SC-003**: All 12 essential Turkish characters have dedicated vocabulary IDs — zero byte-fallback representations among them.
 - **SC-004**: Average tokens-per-word on 10,000 Turkish evaluation sentences is ≤ 1.4.
@@ -97,119 +100,19 @@ The data pipeline and model architecture components need a stable, well-defined 
 - **SC-006**: All five special token IDs (PAD, UNK, BOS, EOS, plus chat tokens) are distinct integers within the 0–63,999 range.
 - **SC-007**: The wrapper interface returns correct vocabulary size and special token IDs on first call after loading — no warm-up or re-training required.
 
+## Clarifications
+
+### Session 2026-03-04
+
+- Q: If the fertility check fails (ratio > 1.4), should the pipeline halt manually, auto-retry, or warn-only? → A: Pipeline halts, logs measured ratio + remediation hints; developer decides next action (add data / adjust hyperparams). No auto-retry.
+- Q: What is the minimum corpus size if OSCAR is unavailable, and is OSCAR a required source? → A: Dataset sources are flexible and will be determined at training time. Only Turkish Wikipedia is confirmed as the default starting source. No minimum corpus size constraint — developer decides which datasets to use before running training.
+- Q: What are the required output file paths for the trained tokenizer? → A: `tokenizer/turkish_bpe.model` (binary model) and `tokenizer/turkish_bpe.vocab` (vocabulary list) at repo root — both paths are fixed and locked.
+
 ## Assumptions
 
-- The Turkish Wikipedia dump (20231101.tr) and OSCAR 23.01 Turkish subset are publicly accessible via the HuggingFace datasets hub during training.
+- The Turkish Wikipedia dump (20231101.tr) is publicly accessible via the HuggingFace datasets hub and is the default corpus source. Other dataset sources are flexible and will be determined by the developer at training time.
 - Training is performed on a machine with internet access and sufficient disk space for a ~7.5 GB plain-text corpus.
 - A vocabulary size of 64,000 is the locked target per PRD v1.3; this value is not negotiable.
 - The four base special token IDs (0–3) are locked per the project constitution and must not change after training.
 - Fertility threshold of ≤ 1.4 tokens/word is a hard gate — the tokenizer must be retrained if this is not met.
-
-## User Scenarios & Testing *(mandatory)*
-
-<!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
-  
-  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
-  Think of each story as a standalone slice of functionality that can be:
-  - Developed independently
-  - Tested independently
-  - Deployed independently
-  - Demonstrated to users independently
--->
-
-### User Story 1 - [Brief Title] (Priority: P1)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-2. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-### User Story 2 - [Brief Title] (Priority: P2)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-### User Story 3 - [Brief Title] (Priority: P3)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-[Add more user stories as needed, each with an assigned priority]
-
-### Edge Cases
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
--->
-
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
-
-## Requirements *(mandatory)*
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
-
-### Functional Requirements
-
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
-
-*Example of marking unclear requirements:*
-
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
-
-### Key Entities *(include if feature involves data)*
-
-- **[Entity 1]**: [What it represents, key attributes without implementation]
-- **[Entity 2]**: [What it represents, relationships to other entities]
-
-## Success Criteria *(mandatory)*
-
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
-
-### Measurable Outcomes
-
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- The output files are locked to `tokenizer/turkish_bpe.model` and `tokenizer/turkish_bpe.vocab` at the repo root; downstream components (model architecture, data pipeline, inference) will reference these exact paths.
