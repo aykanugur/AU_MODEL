@@ -41,7 +41,7 @@
 
 **Goal**: A researcher runs `from model import AUModel, ModelConfig; m = AUModel(ModelConfig()); logits, _ = m(tokens)` and gets logits shaped `(B, T, 64000)` with no errors.
 
-**Independent Test**: `python -c "import torch; from model import AUModel, ModelConfig; m = AUModel(ModelConfig()); t = torch.randint(0, 64000, (2, 128)); logits, _ = m(t); assert logits.shape == (2, 128, 64000); print('US1 PASS')"`
+**Independent Test**: `python -c "import torch; from model import AUModel, ModelConfig; m = AUModel(ModelConfig()); t = torch.randint(0, 64000, (2, 128)); logits, _ = m(t); expected = (2, 128, 64000); (print('US1 PASS') if logits.shape == torch.Size(expected) else (_ for _ in ()).throw(SystemExit(f'BAD SHAPE: {tuple(logits.shape)} != {expected}')))"`
 
 ### Implementation for User Story 1
 
@@ -88,7 +88,7 @@
 **Purpose**: Final verification and memory-bank update.
 
 - [ ] T013 Run `python model/sanity_check.py` in a clean Python environment (only PyTorch installed) and confirm it exits 0 — validates SC-006 independence; additionally time a forward pass on batch `(8, 512)` and confirm it completes in < 10s on >=8-core CPU (SC-002)
-- [ ] T014 [P] Update `memory-bank/progress.md` to mark Epic 2 (model architecture) as ✅ complete with implementation date 2026-03-04
+- [ ] T014 [P] Update `memory-bank/progress.md` to mark Epic 2 (model architecture) as ✅ complete, recording the actual date on which T011 and T012 both pass
 - [ ] T015 [P] Add type annotations to all public function and method signatures across `model/config.py`, `model/rope.py`, `model/attention.py`, `model/feedforward.py`, `model/transformer.py`, `model/sanity_check.py` (constitution MUST: "type hints on all function signatures")
 
 ---
