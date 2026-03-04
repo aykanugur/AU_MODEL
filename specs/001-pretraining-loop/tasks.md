@@ -16,7 +16,7 @@
 
 **Purpose**: Create the synthetic test fixture needed by all test phases.
 
-- [ ] T001 Create synthetic test fixture shard in tests/fixtures/data/wikipedia/shard_00000.bin — generate as `np.random.randint(0, 64000, size=(100_352,), dtype=np.uint16)` (explicitly random-uniform so SC-001 initial-loss test computes ≈ ln(64000) ≈ 11.07; a constant-token fixture would produce loss ≈ 0); save with `arr.tofile(path)`
+- [ ] T001 Create synthetic test fixtures: (a) **training shard** `tests/fixtures/data/wikipedia/shard_00000.bin` — `np.random.randint(0, 64000, size=(100_352,), dtype=np.uint16)` (explicitly random-uniform so SC-001 initial-loss ≈ ln(64000) ≈ 11.07); (b) **validation shard** `tests/fixtures/data/val/shard_00000.bin` — `np.random.randint(0, 64000, size=(2_048,), dtype=np.uint16)` (tiny: only 2048 tokens = 31 windows at seq_len=64; keeps validation pass fast on CPU); both saved with `arr.tofile(path)`; **both fixtures are required** because T014 val_loss test uses the val shard, not the training shard — using the 100k training fixture as val_shard gives ~784 forward passes on CPU which easily exceeds the SC-004 5-minute limit
 
 ---
 
@@ -83,12 +83,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T014 [P] [US3] Add `test_logging` and `test_val_loss` to tests/test_trainer.py — log test: run 20 steps with `micro_batch_size=2, grad_accum_steps=2, seq_len=64, log_interval=5, val_interval=10000, checkpoint_interval=10, no_wandb`, capture stdout, assert exactly 4 lines each containing all **7 fields** (step, loss, val_loss, lr, grad_norm, tok/s, mfu); in this log-format test assert `val_loss=-` (dash, not numeric) because val_interval=10000 won't fire; assert mfu is finite and >0; val_loss test: same dims but with `val_interval=10`, attach a copy of the fixture shard as val_shard, run 15 steps, assert val_loss is a finite float and |val_loss − train_loss| < 2.0 (SC-007)
+- [ ] T014 [P] [US3] Add `test_logging` and `test_val_loss` to tests/test_trainer.py — log test: run 20 steps with `micro_batch_size=2, grad_accum_steps=2, seq_len=64, log_interval=5, val_interval=10000, checkpoint_interval=10, no_wandb`, capture stdout, assert exactly 4 lines each containing all **7 fields** (step, loss, val_loss, lr, grad_norm, tok/s, mfu); assert `val_loss=-` (dash) because val_interval=10000 won't fire; assert mfu is finite and >0; val_loss test: same training dims but add `val_interval=10, val_shard=tests/fixtures/data/val/shard_00000.bin` (the tiny 2048-token fixture from T001 — only 31 windows at seq_len=64 — **do NOT use the 100k training fixture** as val_shard here; that gives ~784 forward passes on CPU and easily blows the 5-minute SC-004 budget), run 15 steps, assert val_loss logged at step 10 is a finite float and |val_loss − train_loss| < 2.0 (SC-007)
 
 ### Implementation for User Story 3
 
 - [ ] T015 [P] [US3] Implement `Logger` class in training/trainer.py — try/except wandb import; check WANDB_API_KEY; `__init__(enabled, project, run_name)` calls wandb.init if available; `log(metrics: dict, step: int)` calls wandb.log or prints formatted line; `finish()` calls wandb.finish; graceful fallback to console-only on any wandb failure
-- [ ] T016 [US3] Implement validation loss pass in `train()` in training/trainer.py — every val_interval steps: instantiate `ShardedDataset([cfg.val_shard], cfg.seq_len)` (**list wrapping required** — ShardedDataset takes `shard_paths: list[str]`, not a bare string; passing `cfg.val_shard` directly causes TypeError), iterate with `torch.no_grad()`, compute mean CE loss across all batches in the shard, store in `best_val_loss`, pass `val_loss` to Logger; skip with `warnings.warn` if `cfg.val_shard is None`
+- [ ] T016 [US3] Implement validation loss pass in `train()` in training/trainer.py — every val_interval steps: instantiate `ShardedDataset([cfg.val_shard], cfg.seq_len)` (**list wrapping required** — ShardedDataset takes `shard_paths: list[str]`); wrap in `DataLoader(val_ds, batch_size=cfg.micro_batch_size, num_workers=0)` to produce `(micro_batch_size, seq_len)` batches (**DataLoader is mandatory** — ShardedDataset is a map-style Dataset with no `__iter__`; feeding its raw `(seq_len,)` output directly to `model(inp, tgt)` crashes on `_B, T = tokens.shape`); if `len(val_ds) == 0` emit `warnings.warn` and skip (shard too small for one window); iterate all batches with `torch.no_grad()`, call `_, loss = model(inp.to(device), tgt.to(device))` for each, compute mean, store in `best_val_loss`, pass to Logger; skip entirely with `warnings.warn` if `cfg.val_shard is None`
 - [ ] T017 [US3] Replace basic console print in train() with full Logger log line in training/trainer.py — format: `step=N  loss=F  val_loss=F|-  lr=F  grad_norm=F  tok/s=F  mfu=F%  elapsed=Fs`; wire estimate_mfu() and elapsed time tracking; replace stub Logger with full Logger class from T015
 
 **Checkpoint**: US3 independently functional. Run `python -m pytest tests/test_trainer.py::test_logging tests/test_trainer.py::test_val_loss -v` — all pass.
@@ -119,7 +119,7 @@
 ## Dependencies
 
 ```
-T001 (fixture) → T009, T011, T013 (all tests that use fixture shards)
+T001 (fixtures: training shard + val shard) → T009, T011, T013 (training shard), T014 (val shard)
 T002 (get_lr)  → T003 (tests can be written before, but need impl to pass), T004+
 T004 (TrainingConfig) → T006, T007, T008
 T005 (save_checkpoint + rotate_checkpoints) → T008 (both called in train loop), T010 (round-trip + rotation test)
