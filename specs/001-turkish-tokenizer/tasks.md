@@ -61,8 +61,8 @@
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T012 [P] Create `colab/01_tokenizer.ipynb`: 4-section notebook following quickstart.md — (1) install deps + mount Drive, (2) `--download` corpus build, (3) `--train` SPM training, (4) `validate_tokenizer.py` + copy artifacts to Drive; include expected outputs and timing estimates per cell
-- [ ] T013 Update `memory-bank/progress.md` to mark Epic 1 tokenizer tasks complete; update `specs/001-turkish-tokenizer/plan.md` status from Draft to Implementation-Ready
+- [x] T012 [P] Create `colab/01_tokenizer.ipynb`: 4-section notebook following quickstart.md — (1) install deps + mount Drive, (2) `--download` corpus build, (3) `--train` SPM training, (4) `validate_tokenizer.py` + copy artifacts to Drive; include expected outputs and timing estimates per cell
+- [x] T013 Update `memory-bank/progress.md` to mark Epic 1 tokenizer tasks complete; update `specs/001-turkish-tokenizer/plan.md` status from Draft to Implementation-Ready
 
 ---
 
