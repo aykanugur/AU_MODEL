@@ -60,6 +60,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - What if the model is moved between devices (CPU → GPU) after instantiation? (RoPE buffers registered via `register_buffer` must move automatically.)
 - What happens when `targets=None` is passed to `forward()`? (Model must return `(logits, None)` without computing loss — required for inference.)
 - What if `vocab_size` in config differs from the actual tokenizer vocabulary? (No runtime guard needed here; documented as a user responsibility.)
+- What is the return type of `Attention.forward()` when `past_kv` is provided? Returns `(output, (new_keys, new_values))` tuple; when `past_kv=None` returns `(output, None)` — caller decides whether to cache.
 
 ## Requirements *(mandatory)*
 
@@ -79,6 +80,9 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **FR-012**: The `forward()` method MUST accept an optional `targets` tensor; when provided, compute and return cross-entropy loss; when absent, return `(logits, None)`.
 - **FR-013**: The model MUST expose a `get_num_params()` method returning the total trainable parameter count.
 - **FR-014**: Default `ModelConfig` values MUST produce a model with approximately 1.3B trainable parameters.
+- **FR-015**: A standalone sanity check script (`model/sanity_check.py`) MUST exist that runs all 4 checks (import, forward shape, param count, initial loss) and exits with code 0 on pass, non-zero on failure.
+- **FR-016**: A Colab notebook (`colab/02_model.ipynb`) MUST exist that runs the same 4 sanity checks plus the single-batch overfit test on GPU.
+- **FR-017**: `Attention.forward()` MUST accept an optional `past_kv` parameter (default `None`). When `None`, standard causal self-attention is used (`is_causal=True`). When provided, it is a tuple `(past_keys, past_values)` that is concatenated with current K/V before the attention dot product, and the updated cache is returned.
 
 ### Key Entities
 
@@ -99,7 +103,7 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **SC-003**: Total trainable parameter count is between 1.25B and 1.35B for the default configuration.
 - **SC-004**: Initial cross-entropy loss on random data is within 5% of `log(vocab_size)` (~10.77 for vocab size 64,000).
 - **SC-005**: The model overfits a single batch to loss < 0.1 within 50 gradient steps.
-- **SC-006**: All sanity checks (import, forward shape, param count, initial loss) pass with zero manual intervention in a clean environment.
+- **SC-006**: Running `python model/sanity_check.py` exits with code 0 and prints PASS for all 4 checks in a clean environment with no manual intervention.
 
 ## Assumptions
 
@@ -108,3 +112,15 @@ A researcher trains the model on a single fixed batch for 50 gradient steps and 
 - **No dropout**: `dropout=0.0` is the default; standard practice for large pretraining runs.
 - **Flash Attention**: `F.scaled_dot_product_attention(is_causal=True)` is used; PyTorch falls back automatically if Flash Attention kernel is unavailable.
 - **Weight initialization**: PyTorch default initialization is used; no custom `_init_weights` required for this phase.
+- **`torch.compile`**: `torch.compile(model)` is called by the trainer (Epic 4), not inside `AUModel`. Sanity checks and inference run on the uncompiled model.
+- **PyTorch version**: Minimum PyTorch 2.1. `F.scaled_dot_product_attention` is used for attention (built-in, no extra install). External `flash-attn` package is optional and deferred to Epic 4.
+
+## Clarifications
+
+### Session 2026-03-04
+
+- Q: Should `AUModel` include checkpoint save/load methods? → A: No — `AUModel` has no checkpoint I/O methods. All save/load logic (including Google Drive path management and Colab resume) belongs to `training/checkpoint.py` (Epic 4). `AUModel` exposes only the standard PyTorch `state_dict()` / `load_state_dict()` interface inherited from `nn.Module`.
+- Q: Where do the sanity checks run? → A: Both — `model/sanity_check.py` (standalone CLI script for local/CI use) and `colab/02_model.ipynb` (Colab notebook for step-by-step GPU validation). Consistent with Epic 1 pattern.
+- Q: Who calls `torch.compile()`? → A: The trainer (Epic 4) calls `torch.compile(model)` after instantiation. `AUModel` itself does not call compile — the model class stays pure. This avoids slowdown during sanity checks and decouples compile from model definition.
+- Q: Should `Attention` support KV cache? → A: Yes — `Attention.forward()` accepts an optional `past_kv` parameter (default `None`). Training uses `past_kv=None` with `is_causal=True`; inference (Epic 6) passes accumulated K/V tensors. This avoids breaking the interface in Epic 6.
+- Q: Minimum PyTorch version? → A: PyTorch ≥ 2.1. `F.scaled_dot_product_attention` (built-in Flash Attention) and `torch.compile` are both stable from 2.1. External `flash-attn` package (latest: 2.8.3) is optional — can be added in Epic 4 if throughput bottleneck is observed.
