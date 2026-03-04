@@ -55,9 +55,10 @@ Python: PEP 8, type hints required, bias=False on all nn.Linear, BF16 for all tr
 - Fertility gate: <= 1.4 tokens/word -- hard exit
 
 ## Recent Changes
+- 002-model-architecture: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 002-model-architecture: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 - 001-turkish-tokenizer: Phase 0 research (SentencePiece, validation patterns, wrapper design)
-- 001-turkish-tokenizer: Phase 1 design (data-model, contracts, quickstart, plan)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
