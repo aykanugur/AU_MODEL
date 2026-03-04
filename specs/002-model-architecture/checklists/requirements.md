@@ -9,7 +9,7 @@
 - [x] Focused on architectural requirements and user value (what the model is and how it behaves)
 - [x] All mandatory sections completed (User Scenarios, Requirements, Success Criteria)
 - [x] Written at appropriate level for intended audience (ML researchers and engineers)
-- [ ] Assumptions section contains PyTorch-specific names (`F.scaled_dot_product_attention`) — acceptable given project context but noted
+- [x] Assumptions section contains PyTorch-specific names (`F.scaled_dot_product_attention`) — acceptable given project context but noted
 
 ## Requirement Completeness
 
