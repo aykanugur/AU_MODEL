@@ -11,6 +11,7 @@
 - Q: Should deduplication be applied per-source independently or across all sources combined? → A: Cross-source (global) deduplication using a memory-efficient Bloom filter — prioritises model accuracy by preventing any document appearing more than once regardless of source.
 - Q: Veri seti sürümleri için sabit bir versiyon mu kullanalım yoksa her çalıştırmada en güncel sürümü mü çekelim? → A: B — internette araştırılarak en güncel sabit sürümler belirlendi: Wikipedia `20231101.tr` (HuggingFace'teki tek dump), OSCAR `OSCAR-2301` config `tr` (Ocak 2023, erişim kısıtlı — HF hesabı onayı gerekir), mC4 `allenai/c4` config `tr` (versiyonsuz statik dataset). Sabit versiyonlar pin'lenip reproduce edilebilirlik sağlanacak.
 - Q: Shard tamamlanma tespiti nasıl yapılacak? → A: A — `shards_manifest.json` manifest dosyası; her tamamlanan shard kaydedilir, Bloom filter checkpoint referansı da bu dosyada tutulur. OSCAR erişim başvurusu yapıldı.
+- Q: Tokenizasyon için paralel işlem (H100 tek kart)? → A: B — `multiprocessing.Pool` kullanılacak; H100 sunucularında 48–128 CPU core mevcut, tokenizasyon CPU-bound ve SentencePiece process-safe. `num_workers = min(cpu_count // 2, 32)` ile HF streaming hızını aşmadan paralelleştirilecek.
 
 ---
 
@@ -81,6 +82,7 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - **FR-001**: The pipeline MUST support a `--source` flag accepting: `wikipedia`, `oscar`, `mc4`, `cc100`, `all`
 - **FR-002**: The pipeline MUST read the HuggingFace API token from the `HF_TOKEN` environment variable (loaded from `.env`); credentials MUST NOT be hardcoded
 - **FR-003**: Each source dataset MUST be loaded in **streaming mode** to avoid materialising the full dataset before processing begins
+- **FR-003b**: Tokenization MUST be parallelised using `multiprocessing.Pool` with `num_workers = min(cpu_count // 2, 32)`. The pool processes batches of cleaned documents; results are collected in order before being written to shards. This targets H100 server hardware (48–128 cores) where tokenization is the CPU bottleneck.
 - **FR-004**: Each document MUST pass through a cleaning step that: removes HTML tags, normalises Unicode to NFC, and discards documents with fewer than 100 tokens after tokenisation
 - **FR-005**: The pipeline MUST deduplicate documents **across all sources combined** using a Bloom filter on the MD5 hash of each document's cleaned text; duplicate documents are silently skipped regardless of which source they originate from. A Bloom filter MUST be used (not a plain hash set) to keep memory usage under 1 GB at 30B-token corpus scale.
 - **FR-006**: The pipeline MUST tokenise cleaned text using the trained BPE model at `tokenizer/turkish_bpe.model`, prepending BOS (`id=1`) and appending EOS (`id=2`) to each document
