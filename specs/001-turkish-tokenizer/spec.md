@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-turkish-tokenizer`  
 **Created**: 4 Mart 2026  
-**Status**: Draft  
+**Status**: Specification-Complete  
 **Input**: User description: "Train a 64k-vocab Turkish-native SentencePiece BPE tokenizer on Wikipedia and OSCAR 23.01, with corpus downloader, fertility validation, Turkish character coverage checks, and TurkishTokenizer wrapper class"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -48,8 +48,8 @@ The data pipeline and model architecture components need a stable, well-defined 
 
 **Acceptance Scenarios**:
 
-1. **Given** the trained tokenizer is loaded via the wrapper, **When** `vocab_size()` is called, **Then** it returns exactly 64,000.
-2. **Given** the trained tokenizer is loaded via the wrapper, **When** `special_ids()` is called, **Then** it returns valid integer IDs for: pad, unk, bos, eos, system, user, assistant, and separator tokens — all distinct from each other.
+- **Given** the trained tokenizer is loaded via the wrapper, **When** `tok.vocab_size` is accessed, **Then** it returns exactly 64,000.
+- **Given** the trained tokenizer is loaded via the wrapper, **When** `tok.pad_id`, `tok.bos_id`, `tok.eos_id`, `tok.system_id`, `tok.user_id`, `tok.assistant_id`, and `tok.sep_id` are accessed, **Then** they return valid, distinct integer IDs for all eight special tokens.
 3. **Given** text with chat-role markers is encoded, **When** decoded, **Then** the role markers are handled cleanly and do not corrupt surrounding text.
 
 ---
@@ -61,7 +61,7 @@ The data pipeline and model architecture components need a stable, well-defined 
 - What happens when a document in the training corpus is extremely short (< 200 characters)? It must be silently skipped, not produce a training error.
 - What happens if a configured corpus source is temporarily unavailable during download? The pipeline must log a warning and continue with whatever data has already been collected; it MUST NOT silently produce a corrupt or empty corpus file.
 - What happens when two special tokens have conflicting IDs? The training configuration must prevent ID collisions between pad, unk, bos, and eos.
-- What happens when the fertility check fails (ratio > 1.4)? The pipeline MUST halt immediately, log the measured ratio, and print a remediation hint (e.g., "increase corpus size or reduce vocab_size"). No automatic retry occurs — the developer must decide the next action.
+- What happens when the fertility check fails (ratio > 1.4)? The validation pipeline MUST run all checks to completion (report-all pattern), then halt with a non-zero exit code, log the exact measured ratio and a remediation hint (e.g., "increase corpus size or add more Turkish data"). No automatic retry occurs — the developer must decide the next action.
 
 ## Requirements *(mandatory)*
 
@@ -97,7 +97,7 @@ The data pipeline and model architecture components need a stable, well-defined 
 - **SC-003**: All 12 essential Turkish characters have dedicated vocabulary IDs — zero byte-fallback representations among them.
 - **SC-004**: Average tokens-per-word on 10,000 Turkish evaluation sentences is ≤ 1.4.
 - **SC-005**: Encode → decode round-trip is lossless for 100% of a 100-string Turkish test suite.
-- **SC-006**: All five special token IDs (PAD, UNK, BOS, EOS, plus chat tokens) are distinct integers within the 0–63,999 range.
+- **SC-006**: All eight special token IDs (PAD, UNK, BOS, EOS, plus four chat control tokens) are distinct integers within the 0–63,999 range.
 - **SC-007**: The wrapper interface returns correct vocabulary size and special token IDs on first call after loading — no warm-up or re-training required.
 
 ## Clarifications

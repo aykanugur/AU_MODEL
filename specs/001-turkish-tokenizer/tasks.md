@@ -18,7 +18,7 @@
 
 **Purpose**: Create the package skeleton and directory structure so all downstream files have a home.
 
-- [ ] T001 Create package skeleton: `tokenizer/__init__.py` (empty placeholder), `data/raw/.gitkeep` (ensures directory is committed)
+- [ ] T001 Create package skeleton: `tokenizer/__init__.py` (empty placeholder — T011 will add re-export content, do not add logic here), `data/raw/.gitkeep` (ensures raw data directory is tracked in git)
 
 ---
 
@@ -28,9 +28,9 @@
 
 **Independent test**: After running the two CLI commands successfully, `tokenizer/turkish_bpe.model` and `tokenizer/turkish_bpe.vocab` exist and load without errors. `sentencepiece.SentencePieceProcessor().load("tokenizer/turkish_bpe.model"); assert sp.get_piece_size() == 64000` passes.
 
-- [ ] T002 [US1] Implement `download_corpus()` in `tokenizer/train_tokenizer.py`: Stream Turkish Wikipedia 20231101.tr via HuggingFace `datasets`, apply NFC normalization to each document, skip documents < 200 chars, write one document per line to `data/raw/tokenizer_corpus.txt` with progress bar (tqdm)
+- [ ] T002 [US1] Implement `download_corpus()` in `tokenizer/train_tokenizer.py`: Stream Turkish Wikipedia 20231101.tr via HuggingFace `datasets`, apply NFC normalization to each document, skip documents < 200 chars, write one document per line to `data/raw/tokenizer_corpus.txt` with progress bar (tqdm); after download, verify the output file exists and is > 1 MB — raise `RuntimeError` and refuse to return if file is missing or empty (guard against partial/failed download per edge case in spec)
 - [ ] T003 [US1] Implement `run_spm_training()` in `tokenizer/train_tokenizer.py`: Check `os.path.exists()` guard (refuse to overwrite without `--force`), call `SentencePieceTrainer.train()` with locked params: `model_type=bpe, vocab_size=64000, character_coverage=0.9999, normalization_rule_name=identity, byte_fallback=True, input_sentence_size=10_000_000, shuffle_input_sentence=True, random_seed=42, pad_id=0, unk_id=1, bos_id=2, eos_id=3, user_defined_symbols=[SYSTEM],[USER],[ASSISTANT],[SEP]`, write to `tokenizer/turkish_bpe.model` and `tokenizer/turkish_bpe.vocab`
-- [ ] T004 [US1] Implement `main()` CLI entry point in `tokenizer/train_tokenizer.py`: `argparse` with `--download` (calls `download_corpus()`), `--train` (calls `run_spm_training()`), `--force` flag (bypasses overwrite guard), `if __name__ == "__main__":` guard
+- [ ] T004 [US1] Implement `main()` CLI entry point in `tokenizer/train_tokenizer.py`: `argparse` with `--download` (calls `download_corpus()`), `--train` (calls `run_spm_training()`), `--corpus <path>` optional flag (skips download and uses an existing plain-text file as corpus, per FR-008: pipeline MUST accept any plain-text input), `--force` flag (bypasses overwrite guard for existing model file), `if __name__ == "__main__": main()` guard
 
 ---
 
@@ -41,8 +41,8 @@
 **Independent test**: Running `python tokenizer/validate_tokenizer.py` against a valid trained model exits with code 0 and prints `[PASS]` for all 4 lines. Running against a model with fertility > 1.4 exits with code 1 and prints `[FAIL] fertility`.
 
 - [ ] T005 [US2] Create `tokenizer/validate_tokenizer.py`: Define `ValidationResult` dataclass (`check_name: str, passed: bool, measured_value: float | None, threshold: float | None, message: str`), implement `check_fertility(sp, corpus_path, n=10_000)` that samples `n` sentences, tokenizes each, computes avg tokens-per-word ratio, returns `ValidationResult` (threshold: 1.4, V-001)
-- [ ] T006 [US2] Add `check_roundtrip(sp, test_strings: list[str])` to `tokenizer/validate_tokenizer.py`: For each string, assert `sp.decode(sp.encode(s)) == s`; return `ValidationResult` with count of passed/total (test all 100 strings even if some fail, V-002)
-- [ ] T007 [US2] Add `check_turkish_chars(sp)` to `tokenizer/validate_tokenizer.py`: For each of the 12 chars `[c, g, i, I, o, s, u, U, O, C, G, S]` with cedilla/breve variants, verify `sp.piece_to_id(char)` returns a dedicated ID with `sp.id_to_piece(id) == char` (not a byte fallback piece like `<0xXX>`); return `ValidationResult` (V-003)
+- [ ] T006 [US2] Add `check_roundtrip(sp, test_strings: list[str]) -> ValidationResult` to `tokenizer/validate_tokenizer.py`: For each string call `sp.decode(sp.encode(s)) == s`; collect all failures without stopping early (report-all); return `ValidationResult` with `passed=(failures==0)` and count in message (V-002); test strings are 100 items hardcoded inline: 25 common Turkish words (merhaba, güzel, çalışmak, şehir, öğrenci...), 25 Turkish sentences, 25 strings with numerals/punctuation, 25 edge cases (empty string, single char, all-ASCII, mixed Turkish/Latin)
+- [ ] T007 [US2] Add `check_turkish_chars(sp) -> ValidationResult` to `tokenizer/validate_tokenizer.py`: For each of the 12 exact Unicode chars `['ç','ğ','ı','İ','ö','ş','ü','Ü','Ö','Ç','Ğ','Ş']` (from FR-003), verify `sp.id_to_piece(sp.piece_to_id(char)) == char` and the piece does NOT match `r'^<0x[0-9A-Fa-f]+>$'` (not a byte fallback); collect all failures without stopping; return `ValidationResult` with `passed=(failures==0)` (V-003)
 - [ ] T008 [US2] Add `check_special_tokens(sp)` to `tokenizer/validate_tokenizer.py`: Verify IDs for `<pad>`=0, `<unk>`=1, `<s>`=2, `</s>`=3, `[SYSTEM]`=4, `[USER]`=5, `[ASSISTANT]`=6, `[SEP]`=7; check all 8 IDs are distinct and in range 0-63999; return `ValidationResult` (V-004)
 - [ ] T009 [US2] Implement `main()` report-all loop in `tokenizer/validate_tokenizer.py`: Parse model path arg (default `tokenizer/turkish_bpe.model`), wrap load in try/except (sys.exit(2) on error), run all 4 check functions collecting `ValidationResult` list, print summary table with `[PASS]`/`[FAIL]` status for each check, print numeric values to stdout and prose + remediation hints to stderr, call `sys.exit(1)` once at end if any check failed
 
