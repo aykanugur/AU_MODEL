@@ -12,6 +12,7 @@
 - Q: Veri seti sürümleri için sabit bir versiyon mu kullanalım yoksa her çalıştırmada en güncel sürümü mü çekelim? → A: B — internette araştırılarak en güncel sabit sürümler belirlendi: Wikipedia `20231101.tr` (HuggingFace'teki tek dump), OSCAR `OSCAR-2301` config `tr` (Ocak 2023, erişim kısıtlı — HF hesabı onayı gerekir), mC4 `allenai/c4` config `tr` (versiyonsuz statik dataset). Sabit versiyonlar pin'lenip reproduce edilebilirlik sağlanacak.
 - Q: Shard tamamlanma tespiti nasıl yapılacak? → A: A — `shards_manifest.json` manifest dosyası; her tamamlanan shard kaydedilir, Bloom filter checkpoint referansı da bu dosyada tutulur. OSCAR erişim başvurusu yapıldı.
 - Q: Tokenizasyon için paralel işlem (H100 tek kart)? → A: B — `multiprocessing.Pool` kullanılacak; H100 sunucularında 48–128 CPU core mevcut, tokenizasyon CPU-bound ve SentencePiece process-safe. `num_workers = min(cpu_count // 2, 32)` ile HF streaming hızını aşmadan paralelleştirilecek.
+- Q: İlerleme raporlama sıklığı? → A: C — İki katmanlı: (1) Her 10.000 dokümanda kısa satır `[wikipedia] 10000 docs | 8.2M tokens`, (2) Her shard tamamlanınca detaylı özet `[Shard 0042/1500] 500M tokens | 12.3 GB written | elapsed 00:14:22`.
 
 ---
 
@@ -88,7 +89,7 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - **FR-006**: The pipeline MUST tokenise cleaned text using the trained BPE model at `tokenizer/turkish_bpe.model`, prepending BOS (`id=1`) and appending EOS (`id=2`) to each document
 - **FR-007**: Tokenised documents MUST be concatenated into a flat uint16 numpy array and written to binary shard files of approximately 1 GB each, named `shard_NNNN.bin`, in the configured output directory
 - **FR-008**: The pipeline MUST support resumable execution via a `shards_manifest.json` file in the output directory. On each completed shard, the manifest is updated with the shard filename, token count, and source. On restart, the pipeline reads the manifest to skip already-completed shards, and the Bloom filter checkpoint path is also recorded in the manifest to allow resuming deduplication state.
-- **FR-009**: On completion the pipeline MUST print: number of shards written, total token count, token count per source, and total elapsed time
+- **FR-009**: The pipeline MUST emit two levels of progress output: (1) a short line every 10,000 documents processed: `[<source>] <N> docs | <M>M tokens`; (2) a detailed summary on each shard completion: `[Shard NNNN/<total>] <tokens>M tokens | <GB> GB written | elapsed HH:MM:SS`. On full completion, a final summary MUST be printed: total shards, total tokens, tokens-per-source breakdown, and total elapsed time.
 - **FR-010**: Each completed shard MUST be validated (file size > 0, readable as uint16) before the next shard begins; corrupted shards are deleted and re-written
 - **FR-011**: `training/dataset.py` MUST implement `ShardedDataset(shard_paths, seq_len)` returning `(input_ids, target_ids)` pairs of shape `(seq_len,)` where `target_ids` is `input_ids` shifted left by one position
 - **FR-012**: `ShardedDataset` MUST raise `ValueError` if any shard file is missing, empty, or has a byte size not divisible by 2 (uint16 alignment requirement)
