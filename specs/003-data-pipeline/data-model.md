@@ -51,12 +51,12 @@ Represents one HF dataset source with its access configuration.
 
 **Pinned values**:
 
-| `name` | `hf_id` | `config` | `text_field` | `requires_auth` |
-|--------|---------|----------|-------------|-----------------|
-| `wikipedia` | `wikimedia/wikipedia` | `20231101.tr` | `"text"` | `False` |
-| `oscar` | `oscar-corpus/OSCAR-2301` | `tr` | `"content"` | `True` |
-| `mc4` | `allenai/c4` | `tr` | `"text"` | `False` |
-| `cc100` | `cc100` | `tr` | `"text"` | `False` |
+| `name` | `hf_id` | `config` | `split` | `text_field` | `requires_auth` |
+|--------|---------|----------|---------|-------------|-----------------|
+| `wikipedia` | `wikimedia/wikipedia` | `20231101.tr` | `"train"` | `"text"` | `False` |
+| `oscar` | `oscar-corpus/OSCAR-2301` | `tr` | `"train"` | `"content"` | `True` |
+| `mc4` | `allenai/c4` | `tr` | `"train"` | `"text"` | `False` |
+| `cc100` | `cc100` | `tr` | `"train"` | `"text"` | `False` |
 
 ---
 

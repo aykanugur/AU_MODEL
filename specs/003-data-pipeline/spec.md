@@ -30,7 +30,7 @@ A developer runs the preparation script targeting one dataset (e.g. Turkish Wiki
 
 1. **Given** the tokenizer model file exists and the Drive output directory is mounted, **When** the script runs with `--source wikipedia`, **Then** at least one shard file (`shard_0000.bin`) is written to the Drive directory and the script prints a token count summary.
 2. **Given** the script has already produced shards from a previous run, **When** the script is re-run with `--source wikipedia`, **Then** it skips already-completed shards and only processes remaining ones.
-3. **Given** a document contains only HTML tags or fewer than 100 tokens after cleaning, **When** the cleaning step processes it, **Then** that document is silently discarded and not written to any shard.
+3. **Given** a document contains only HTML tags or fewer than 100 tokens after cleaning, **When** the tokenization step processes it, **Then** that document is silently discarded and not written to any shard.
 
 ---
 
@@ -99,7 +99,7 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 - **Document**: A single unit of raw text from a source dataset. Key attributes: raw text, source name, cleaned text, token count.
 - **Shard**: A binary file of uint16 token IDs, approximately 1 GB. Named `shard_NNNN.bin`. Represents a contiguous flat slice of the full token stream.
 - **Corpus**: The complete collection of shards. Attributes: total token count, shard count, per-source token breakdown.
-- **Source**: One of Wikipedia, OSCAR, mC4, CC-100. Each yields documents as plain text strings via a streaming iterator. The text field name varies per source (`"text"` for Wikipedia/OSCAR/mC4).
+- **Source**: One of Wikipedia, OSCAR, mC4, CC-100. Each yields documents as plain text strings via a streaming iterator. The text field name varies per source — OSCAR uses `"content"`, all others (`wikipedia`, `mc4`, `cc100`) use `"text"`.
 
 ---
 
@@ -128,5 +128,5 @@ The `training/dataset.py` `ShardedDataset` class reads the shard files and yield
 |--------|---------------|----------------|-------|
 | Wikipedia | `wikimedia/wikipedia` | `20231101.tr` | Only available dump on HF; ~500K Turkish articles |
 | OSCAR | `oscar-corpus/OSCAR-2301` | `tr` (dedup) | Jan 2023 release; 73.7 GB Turkish; **gated — HF account approval required** |
-| mC4 | `allenai/c4` | `multilingual` / `tr` | No versioning; static dataset; ~6B tr tokens |
+| mC4 | `allenai/c4` | `tr` | No versioning; static dataset; ~6B tr tokens. HuggingFace config name for the Turkish subset is `tr`. |
 | CC-100 | `cc100` | `tr` | Optional fallback if OSCAR access is denied |

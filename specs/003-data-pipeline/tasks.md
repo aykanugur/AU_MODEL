@@ -29,7 +29,7 @@
 
 **⚠️ CRITICAL**: US1 and US2 cannot proceed without T003–T004.
 
-- [ ] T003 Add `SOURCES` config dict in `scripts/prepare_data.py` mapping each source name to `{hf_id, config, split, text_field, requires_auth}` per the pinned versions in [data-model.md](data-model.md): wikipedia=`wikimedia/wikipedia`/`20231101.tr`/`"text"`, oscar=`oscar-corpus/OSCAR-2301`/`tr`/`"content"`, mc4=`allenai/c4`/`tr`/`"text"`, cc100=`cc100`/`tr`/`"text"`
+- [ ] T003 Add `SOURCES` config dict in `scripts/prepare_data.py` mapping each source name to `{hf_id, config, split, text_field, requires_auth}` per the pinned versions in [data-model.md](data-model.md): wikipedia=`wikimedia/wikipedia`/config=`20231101.tr`/split=`"train"`/`"text"`, oscar=`oscar-corpus/OSCAR-2301`/config=`tr`/split=`"train"`/`"content"`, mc4=`allenai/c4`/config=`tr`/split=`"train"`/`"text"`, cc100=`cc100`/config=`tr`/split=`"train"`/`"text"`
 - [ ] T004 Implement `load_hf_token() -> str | None` in `scripts/prepare_data.py`: load `.env` via `python-dotenv`, return `HF_TOKEN` value; raise `ValueError` with clear message if a source requires auth and token is absent
 
 **Checkpoint**: Foundation ready — US1, US2, US3 can now begin (US3 is fully independent).
@@ -42,7 +42,7 @@
 
 **Independent Test**: `python scripts/prepare_data.py --source wikipedia --output /tmp/test_shards/` → at least one `shard_0000.bin` written, token count printed, `ShardedDataset` reads it back without errors.
 
-- [ ] T005 [US1] Implement CLI arg parsing in `scripts/prepare_data.py`: `--source` (choices: wikipedia, oscar, mc4, cc100, all), `--output` (str, default Drive path), `--tokenizer` (str, default `tokenizer/turkish_bpe.model`)
+- [ ] T005 [US1] Implement CLI arg parsing in `scripts/prepare_data.py`: `--source` (choices: wikipedia, oscar, mc4, cc100, all), `--output` (str, default `"/content/drive/MyDrive/AUModel/data/"` per constitution checkpoint path), `--tokenizer` (str, default `tokenizer/turkish_bpe.model`)
 - [ ] T006 [US1] Implement `clean_document(text: str) -> str | None` in `scripts/prepare_data.py`: strip HTML tags with regex, apply `unicodedata.normalize("NFC", text)`, return `None` if result is empty string (short-circuit before tokenization)
 - [ ] T007 [US1] Implement `init_bloom(output_dir: str) -> BloomFilter` in `scripts/prepare_data.py`: load from `bloom.pkl` if it exists in output_dir (resume), else create new `BloomFilter(BLOOM_CAPACITY, BLOOM_ERROR)`; implement `save_bloom(bloom, path: str) -> None` using `pickle.dump`
 - [ ] T008 [US1] Implement `load_manifest(output_dir: str) -> dict` and `save_manifest(manifest: dict, output_dir: str) -> None` in `scripts/prepare_data.py`: read/write `shards_manifest.json` per the schema in [data-model.md](data-model.md); return empty manifest dict if file does not exist
@@ -50,7 +50,7 @@
 - [ ] T010 [US1] Implement `tokenize_batch(texts: list[str], pool: Pool) -> list[list[int]]` in `scripts/prepare_data.py`: calls `pool.map(_tokenize_doc, texts)`, filters results where `len(ids) < MIN_DOC_TOKENS`, validates all IDs in `[0, VOCAB_SIZE)` raising `ValueError` if any are out of range
 - [ ] T011 [US1] Implement `ShardWriter` class in `scripts/prepare_data.py`: holds a `np.ndarray(TOKENS_PER_SHARD, dtype=np.uint16)` buffer and `pos` counter; `write_tokens(ids)` fills buffer; `flush(output_dir, shard_idx, source_counts)` writes `shard_NNNN.bin` via `np.ndarray.tofile`, then validates (size > 0, `np.fromfile` round-trip), updates manifest and saves Bloom checkpoint; deletes and re-raises on validation failure
 - [ ] T012 [US1] Implement `stream_source(source_name: str, hf_token: str | None) -> Iterator[str]` in `scripts/prepare_data.py`: calls `load_dataset(hf_id, config, split="train", streaming=True, token=hf_token)`, yields `record[text_field]` for each record
-- [ ] T013 [US1] Implement `run_pipeline(sources: list[str], output_dir: str, tokenizer_path: str)` main loop in `scripts/prepare_data.py`: initialize Bloom + manifest + Pool(spawn, initializer=_init_worker); for each source stream documents → `clean_document` → dedup via Bloom → accumulate batch of `BATCH_SIZE` → `tokenize_batch` → `ShardWriter.write_tokens`; flush final partial shard on completion
+- [ ] T013 [US1] Implement `run_pipeline(sources: list[str], output_dir: str, tokenizer_path: str)` main loop in `scripts/prepare_data.py`: initialize Bloom + manifest + Pool(spawn, initializer=_init_worker); for each source stream documents → `clean_document` → dedup via Bloom → accumulate batch of `BATCH_SIZE` → `tokenize_batch` → `ShardWriter.write_tokens`; flush final partial shard on completion; after processing each source print `[WARNING] Source <name> produced 0 tokens — all documents filtered or source empty` if that source contributed zero tokens
 - [ ] T014 [US1] Add dual-level progress reporting inside `run_pipeline` in `scripts/prepare_data.py`: print `[<source>] <N> docs | <M>M tokens` every 10,000 docs; print `[Shard NNNN/----] <tokens>M tokens | <GB> GB written | elapsed HH:MM:SS` after each `ShardWriter.flush`
 - [ ] T015 [US1] Add final summary print at end of `run_pipeline` in `scripts/prepare_data.py`: total shards, total tokens, per-source token breakdown table, total elapsed time; add `if __name__ == "__main__":` entry point calling `run_pipeline`
 
@@ -89,7 +89,20 @@
 ## Phase 6: Polish & Cross-Cutting
 
 - [ ] T024 Add `requirements-data.txt` at repo root listing new dependencies: `pybloom-live>=4.0`, `mmh3>=3.0`, `datasets>=2.14`, `sentencepiece>=0.1.99`; update [quickstart.md](quickstart.md) install command to reference it
-- [ ] T025 Add token ID range guard inside `_tokenize_doc` in `scripts/prepare_data.py`: after `sp.EncodeAsIds`, iterate IDs and `raise ValueError(f"Token ID {id} out of range [0, {VOCAB_SIZE})")` if any ID >= VOCAB_SIZE; this satisfies SC-006
+- [ ] T025 Add token ID range guard inside `_tokenize_doc` in `scripts/prepare_data.py`: after `sp.EncodeAsIds`, iterate IDs and `raise ValueError(f"Token ID {id} out of range [0, {VOCAB_SIZE})")` if any ID >= VOCAB_SIZE; inner guard for early detection — outer batch-level check is in T010
+
+---
+
+## Phase 7: Tests
+
+**Purpose**: Verify correctness of cleaning, dedup, tokenization, sharding, and resume. Covers SCs and plan.md Task Group 3.
+
+- [ ] T026 [P] Unit test `clean_document()` in `tests/test_prepare_data.py`: assert HTML tags stripped, NFC normalization applied, returns `None` for empty string short-circuit; covers FR-004
+- [ ] T027 [P] Unit test Bloom filter in `tests/test_prepare_data.py`: assert duplicate doc hash is detected on second call, Bloom checkpoint round-trips correctly via `pickle.dump`/`load`; covers FR-005
+- [ ] T028 [P] [US3] Unit test `ShardedDataset` in `tests/test_dataset.py`: assert shift invariant `target_ids[t] == input_ids[t+1]` for all `t < seq_len-1`; assert `ValueError` raised on missing shard, empty shard, and odd byte-size shard; covers FR-011, FR-012, SC-004
+- [ ] T029 Integration test in `tests/test_pipeline.py`: generate a synthetic 1,000-doc stream → run `run_pipeline` → confirm ≥1 shard written, token count > 0, manifest is valid JSON with correct `total_tokens`; covers plan task 3.4
+- [ ] T030 Resume test in `tests/test_pipeline.py`: run pipeline against synthetic stream until 1 shard completes, then interrupt (inject exception), restart → confirm final corpus is identical to an uninterrupted run (same shard checksum); covers SC-005, plan task 3.5
+- [ ] T031 [P] SC-006 spot-check script `tests/check_token_range.py`: given a shard directory, sample up to 100 random `.bin` files, load each as `np.fromfile(dtype=np.uint16)`, assert all values in `[0, VOCAB_SIZE)`, print pass/fail per shard; standalone — run manually after full corpus build; covers SC-006
 
 ---
 
@@ -97,14 +110,18 @@
 
 ```
 Phase 1 (Setup) → Phase 2 (Foundational) → Phase 3 (US1) → Phase 4 (US2)
-                                          ↘
-                                           Phase 5 (US3)  ← independent
+                                          ↘                        ↘
+                                           Phase 5 (US3)            Phase 7 (Tests)
+                                                    ↘              ↗
+                                                     ← independent
 ```
 
 - **US2 requires US1 complete**: `stream_source`, `ShardWriter`, `run_pipeline` must exist before extending them
 - **US3 is fully independent**: `training/dataset.py` only reads `.bin` files; can develop and test against a fake shard
+- **Phase 7 can begin after Phase 3**: T026/T027/T028 can be written alongside US1; T029/T030 need US1 complete; T031 needs full corpus
 - **T017 ∥ T018**: Both are US2 tasks touching different functions in `prepare_data.py` — can be done in parallel by different developers
 - **T020 ∥ T021 ∥ T023**: All in `training/dataset.py`, touching different methods — parallelizable
+- **T026 ∥ T027 ∥ T028 ∥ T031**: All test tasks in different files — fully parallelizable
 
 ---
 
@@ -136,8 +153,11 @@ Dev B: T017 ∥ T018 (parallel — different functions in same file)
 1. **T001–T004** (Phase 1+2) — ~30 min setup
 2. **T005–T015** (US1) — Wikipedia pipeline working end-to-end ← **verify this before proceeding**
 3. **T020–T023** (US3) — `ShardedDataset` ready for training loop ← **Epic 4 unblocked here**
-4. **T016–T019** (US2) — Multi-source scale-out
-5. **T024–T025** (Polish)
+4. **T026–T028** (Tests) — unit tests for clean, bloom, ShardedDataset (can run alongside step 2-3)
+5. **T016–T019** (US2) — Multi-source scale-out
+6. **T029–T030** (Tests) — integration + resume tests
+7. **T024–T025** (Polish)
+8. **T031** (SC-006 spot-check) — run after full corpus build
 
 ---
 
@@ -151,8 +171,9 @@ Dev B: T017 ∥ T018 (parallel — different functions in same file)
 | Phase 4: US2 | T016–T019 | [US2] | 4 |
 | Phase 5: US3 | T020–T023 | [US3] | 4 |
 | Phase 6: Polish | T024–T025 | — | 2 |
-| **Total** | | | **25** |
+| Phase 7: Tests | T026–T031 | — | 6 |
+| **Total** | | | **31** |
 
-**Parallel opportunities**: 8 tasks marked [P] across US1/US2/US3 phases  
+**Parallel opportunities**: 12 tasks marked [P] across US1/US2/US3/Tests phases  
 **Independent test criteria**: Each story has its own runnable verification (see phase headers)  
 **MVP scope**: Phases 1–3 (T001–T015) — Wikipedia pipeline working end-to-end
