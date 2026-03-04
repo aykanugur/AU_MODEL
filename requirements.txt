@@ -1,0 +1,8 @@
+torch>=2.2.0
+sentencepiece>=0.1.99
+numpy>=1.26.0
+datasets>=2.18.0          # HuggingFace datasets (for OSCAR, mC4)
+transformers>=4.39.0      # optional, useful utilities
+tqdm>=4.66.0
+wandb>=0.16.0             # optional: training metrics dashboard
+flash-attn>=2.5.0         # install separately: pip install flash-attn --no-build-isolation

@@ -1,0 +1,155 @@
+# Progress Tracker
+
+> Update this file whenever a task is completed or a phase changes.
+
+## Overall Status
+
+```
+Phase 0: Design & Planning          ████████████  COMPLETE
+Phase 1: Tokenizer                  ░░░░░░░░░░░░  NOT STARTED
+Phase 2: Model Architecture         ░░░░░░░░░░░░  NOT STARTED
+Phase 3: Data Pipeline              ░░░░░░░░░░░░  NOT STARTED
+Phase 4: Pretraining                ░░░░░░░░░░░░  NOT STARTED
+Phase 5: SFT (Instruction Tuning)   ░░░░░░░░░░░░  NOT STARTED
+Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT STARTED
+```
+
+---
+
+## Phase 0: Design & Planning ✅
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Architecture decision | ✅ Done | LLaMA-style, 1.3B |
+| Hyperparameter selection | ✅ Done | Locked for H100 100hrs |
+| Project structure scaffolded | ✅ Done | All dirs + empty files |
+| DESIGN.md created | ✅ Done | Full pseudocode per module |
+| PRD_TEMPLATE.md created | ✅ Done | |
+| Memory bank created | ✅ Done | This system |
+
+---
+
+## Phase 1: Tokenizer ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Collect Turkish corpus for tokenizer training | ⬜ | Use Wikipedia dump first |
+| Implement `train_tokenizer.py` | ⬜ | See DESIGN.md §Phase 1 |
+| Train BPE tokenizer | ⬜ | Target: 32k vocab |
+| Validate Turkish fertility ratio | ⬜ | Target: 1.3–1.8 tok/word |
+| Confirm Turkish chars have native tokens | ⬜ | ç,ğ,ı,ö,ş,ü must not be byte-fallback |
+| Update special token IDs in `config.py` | ⬜ | After training |
+
+**Entry criteria:** None  
+**Exit criteria:** Tokenizer trained, fertility validated, special token IDs known
+
+---
+
+## Phase 2: Model Architecture ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement `model/config.py` | ⬜ | ModelConfig dataclass |
+| Implement `model/rope.py` | ⬜ | precompute_freqs_cis + apply_rotary_emb |
+| Implement `model/feedforward.py` | ⬜ | SwiGLU |
+| Implement `model/attention.py` | ⬜ | GQA + RoPE |
+| Implement `model/transformer.py` | ⬜ | Full AUModel + RMSNorm |
+| Implement `model/__init__.py` | ⬜ | Exports |
+| Sanity check: forward pass | ⬜ | Input → logits, no errors |
+| Sanity check: parameter count | ⬜ | Must be ~1.3B |
+| Sanity check: initial loss | ⬜ | Must be ~log(32000) ≈ 10.37 |
+| Sanity check: overfit 1 batch | ⬜ | Loss → 0 on single batch |
+
+**Entry criteria:** Tokenizer Phase complete (vocab_size confirmed)  
+**Exit criteria:** All 4 sanity checks pass
+
+---
+
+## Phase 3: Data Pipeline ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Download Turkish Wikipedia | ⬜ | ~1GB |
+| Download OSCAR 23.01 Turkish | ⬜ | ~50GB streaming |
+| Download mC4 Turkish | ⬜ | ~100GB streaming |
+| Implement `scripts/prepare_data.py` | ⬜ | Clean + tokenize + shard |
+| Run data pipeline | ⬜ | Target: 30B+ tokens |
+| Validate shards | ⬜ | Check token count, no corruption |
+
+**Entry criteria:** Tokenizer trained  
+**Exit criteria:** data/processed/ has ≥ 1500 shards (≥30B tokens)
+
+---
+
+## Phase 4: Pretraining ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement `training/dataset.py` | ⬜ | Shard streaming DataLoader |
+| Implement `training/lr_scheduler.py` | ⬜ | Cosine + warmup |
+| Implement `training/checkpoint.py` | ⬜ | Save/resume |
+| Implement `training/trainer.py` | ⬜ | Full training loop |
+| Implement `scripts/run_training.py` | ⬜ | CLI entry point |
+| Set up Colab notebook `02_pretrain.ipynb` | ⬜ | |
+| Run training — 100 hours | ⬜ | Target: 32B tokens |
+| Monitor loss curve | ⬜ | Should decrease smoothly |
+| Save final checkpoint | ⬜ | |
+
+**Entry criteria:** Data pipeline complete, model architecture verified  
+**Exit criteria:** 32B tokens processed, loss ≈ 2.5–3.0, checkpoint saved
+
+---
+
+## Phase 5: SFT — Instruction Tuning ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Collect Turkish instruction data | ⬜ | Translate Alpaca/Dolly + scrape |
+| Implement `sft/sft_dataset.py` | ⬜ | Chat format + loss masking |
+| Implement `sft/sft_trainer.py` | ⬜ | SFT loop |
+| Run SFT — 3 epochs | ⬜ | ~2–5hrs compute |
+| Evaluate chat quality manually | ⬜ | Turkish Q&A test set |
+
+**Entry criteria:** Pretrained base model checkpoint  
+**Exit criteria:** Model responds coherently in Turkish chat format
+
+---
+
+## Phase 6: Inference & Chat ⬜
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Implement `inference/generate.py` | ⬜ | Sampling strategies |
+| Implement `inference/chat.py` | ⬜ | Terminal chat loop |
+| Test chat with sample questions | ⬜ | |
+| Benchmark Turkish tasks | ⬜ | Compare to existing multilingual models |
+
+**Entry criteria:** SFT complete  
+**Exit criteria:** Working Turkish chatbot
+
+---
+
+## Known Issues / Bugs
+
+*None yet — implementation not started.*
+
+---
+
+## Completed Milestones
+
+| Date | Milestone |
+|------|-----------|
+| 4 Mart 2026 | Project designed, scaffolded, memory bank created |
+
+---
+
+## Metrics to Track During Training
+
+| Metric | Target | Current |
+|--------|--------|---------|
+| Training loss | ≈ 2.5–3.0 after 32B tokens | — |
+| Val loss | < training loss (no overfit) | — |
+| Tokens processed | 32B | 0 |
+| Tokens/sec | ~155k | — |
+| Training hours used | 100 | 0 |
+| Chinchilla ratio | 25× | — |
