@@ -45,7 +45,7 @@
 ### Implementation for User Story 1
 
 - [ ] T004 [US1] Implement `TrainingConfig` dataclass + `parse_args()` CLI in training/trainer.py — all fields from data-model.md (micro_batch_size=32, grad_accum_steps=4, seq_len=4096, max_steps=100000, warmup_steps=2000, max_lr=3e-4, min_lr=3e-5, beta1=0.9, beta2=0.95, eps=1e-8, weight_decay=0.1, grad_clip=1.0, log_interval=10, checkpoint_interval=1000, checkpoint_keep=10, val_interval=1000, use_wandb=True, gradient_checkpointing=False); emit `warnings.warn` (NOT ValueError) when `micro_batch_size × grad_accum_steps ≠ 128` — this preserves test configs (e.g. 2×2=4) while flagging non-H100 defaults; raise ValueError only for clearly invalid fields (micro_batch_size<1, grad_accum_steps<1, max_lr≤min_lr, warmup_steps≥max_steps); full type hints
-- [ ] T005 [P] [US1] Implement `save_checkpoint(path, state)` with atomic write (write to .tmp then os.rename) in training/checkpoint.py — state dict includes model_state, optimizer_state, step, config, loader_state, best_val_loss, created_at; full type hints
+- [ ] T005 [P] [US1] Implement `save_checkpoint(path, state)` with atomic write (write to .tmp then os.rename) in training/checkpoint.py — state dict includes model_state, optimizer_state, step, config, loader_state, best_val_loss, created_at; also implement `rotate_checkpoints(ckpt_dir, keep=10)` in the same file — glob `step_*.pt`, sort by step number, delete oldest when count > keep (R-005); **both functions MUST be in this task** because T008 calls them in Phase 3 and T012 is Phase 4 — implementing rotate_checkpoints only in T012 would leave T008 with an ImportError; full type hints
 - [ ] T006 [US1] Implement `SourceState` dataclass + `InterleavedShardLoader(IterableDataset)` in training/trainer.py — weighted-random source selection, infinite cycling with per-cycle reshuffle (seed=base_seed+cycle×1000), per-source shard_idx/sample_idx/cycle_count tracking, state_dict()/load_state_dict() methods for resume; wraps `ShardedDataset` from training/dataset.py; default weights: wikipedia=0.20, oscar=0.30, mc4=0.30, cc100=0.20; **partial-source handling**: at startup scan `<shard_dir>/<source>/` subdirectories and silently skip any source whose directory is absent or contains no `.bin` files, renormalising weights over the present sources — this is required so CPU tests (which only have a `wikipedia/` fixture) run without error (contracts doc: “If only one source directory is present, the trainer runs on that source only”)
 - [ ] T007 [US1] Implement `estimate_mfu(tokens_per_sec, model_params, seq_len, peak_flops, num_layers, num_heads, d_model) -> float` in training/trainer.py — formula: `(6×N + 12×L×T×H×d_head) × tokens_per_sec / peak_flops`; defaults: model_params=749_544_960, seq_len=4096, peak_flops=989e12, num_layers=24, num_heads=12, d_model=1536
 - [ ] T008 [US1] Implement core `train(cfg: TrainingConfig) -> None` in training/trainer.py — device setup (cuda:0 or cpu), TF32 flags, SDPA backend flags (enable_flash_sdp/enable_mem_efficient_sdp), model = AUModel(ModelConfig()) loaded and compiled with torch.compile, AdamW optimiser, BF16 autocast context for forward+loss, compute loss via `F.cross_entropy(logits.view(-1, vocab_size), targets.view(-1))` (no ignore_index — all tokens active in pretraining), grad accum loop (loss /= grad_accum_steps per micro-step), grad clip max_norm=1.0, LR scheduler step each optimiser update, every checkpoint_interval steps: call `save_checkpoint(ckpt_path, state)` **then immediately** call `rotate_checkpoints(cfg.output_dir, keep=cfg.checkpoint_keep)` (FR-007: auto-delete oldest — these two calls are always paired), basic console print of step+loss+lr; call `estimate_mfu(..., seq_len=cfg.seq_len)` (pass cfg.seq_len explicitly — do NOT rely on the default 4096, which would give wrong flop counts for test runs at seq_len=64); gradient_checkpointing applied if cfg.gradient_checkpointing; __main__ entry point calling parse_args()+train()
@@ -68,7 +68,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Implement `load_latest_checkpoint(output_dir) -> dict | None` + `rotate_checkpoints(ckpt_dir, keep=10)` in training/checkpoint.py — glob `step_*.pt`, sort by step number, load highest; delete oldest when count > keep; return None if directory empty (with info print)
+- [ ] T012 [US2] Implement `load_latest_checkpoint(output_dir) -> dict | None` in training/checkpoint.py — glob `step_*.pt`, sort by step number, load and return the highest; return None if directory empty or contains no matching files (with info print); **note**: `rotate_checkpoints` was already implemented in T005 alongside `save_checkpoint` — do NOT reimplement it here
 - [ ] T013 [US2] Wire resume into `train()` in training/trainer.py: at startup call `load_latest_checkpoint`, restore model+optimizer state_dict, restore InterleavedShardLoader via load_state_dict, set step=checkpoint["step"]+1; print `[Resume] Loaded step_N.pt — resuming from step N+1` or `[Resume] No checkpoint found — starting from step 0`
 
 **Checkpoint**: US2 independently functional. Run `python -m pytest tests/test_checkpoint.py tests/test_trainer.py::test_resume -v` — all pass.
@@ -122,10 +122,10 @@
 T001 (fixture) → T009, T011, T013 (all tests that use fixture shards)
 T002 (get_lr)  → T003 (tests can be written before, but need impl to pass), T004+
 T004 (TrainingConfig) → T006, T007, T008
-T005 (save_checkpoint) → T008 (called in train loop), T010 (round-trip test)
+T005 (save_checkpoint + rotate_checkpoints) → T008 (both called in train loop), T010 (round-trip + rotation test)
 T006 (InterleavedShardLoader) → T008, T011, T013
 T007 (estimate_mfu) → T008, T014
-T008 (core train loop) → T009, T012, T013, T016, T017
+T008 (core train loop) → T009, T013, T016, T017
 T012 (load_latest_checkpoint) → T013 (resume logic wired into train())
 T015 (Logger class) → T017 (replaces stub logger in train())
 T016 (val pass) → T017 (val_loss fed into log line)
@@ -140,7 +140,7 @@ T016 (val pass) → T017 (val_loss fed into log line)
 
 **US2 (Phase 4)**: 2 agents simultaneously:
 - Agent A: T010 (test_checkpoint.py) + T011 (test_resume)
-- Agent B: T012 (load+rotate) → T013 (resume logic)
+- Agent B: T012 (load_latest_checkpoint only) → T013 (resume logic)
 
 **US3 (Phase 5)**: 2 agents simultaneously:
 - Agent A: T014 (logging tests) + T015 (Logger class)
