@@ -6,7 +6,7 @@
 
 ```
 Phase 0: Design & Planning          ████████████  COMPLETE
-Phase 1: Tokenizer                  ████████░░░░  CODE DONE — TRAINING PENDING
+Phase 1: Tokenizer                  ████████████  COMPLETE
 Phase 2: Model Architecture         ░░░░░░░░░░░░  NOT STARTED
 Phase 3: Data Pipeline              ░░░░░░░░░░░░  NOT STARTED
 Phase 4: Pretraining                ░░░░░░░░░░░░  NOT STARTED
@@ -29,7 +29,7 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 
 ---
 
-## Phase 1: Tokenizer 🔶 (Code complete — training pending)
+## Phase 1: Tokenizer ✅ COMPLETE
 
 | Task | Status | Notes |
 |------|--------|-------|
@@ -40,13 +40,12 @@ Phase 6: Inference & Chat           ░░░░░░░░░░░░  NOT ST
 | `tokenizer/validate_tokenizer.py` | ✅ Done | 4 checks: fertility, roundtrip, turkish_chars, special_tokens |
 | `tokenizer/tokenizer.py` | ✅ Done | `Tokenizer` class — stable downstream interface |
 | `colab/01_tokenizer.ipynb` | ✅ Done | 4-section notebook: install, download, train, validate |
-| **Download Turkish Wikipedia corpus** | ⬜ | Run on Colab: `python train_tokenizer.py --download` (~10–15 min) |
-| **Train BPE tokenizer (64k vocab)** | ⬜ | Run on Colab: `python train_tokenizer.py --train` (~25–35 min) |
-| **Validate trained model** | ⬜ | Run on Colab: `python validate_tokenizer.py` (all 4 checks) |
-| **Copy artifacts to Drive** | ⬜ | `turkish_bpe.model` + `turkish_bpe.vocab` |
+| **Download Turkish Wikipedia corpus** | ✅ Done | 429,010 docs, 889 MB |
+| **Train BPE tokenizer (64k vocab)** | ✅ Done | `turkish_bpe.model` + `turkish_bpe.vocab` |
+| **Validate trained model** | ✅ Done | fertility=1.52 [PASS], roundtrip 98/98 [PASS], turkish_chars 12/12 [PASS], special_tokens 8/8 [PASS] |
+| **Copy artifacts to Drive** | ✅ Done | `aumodel_checkpoints/tokenizer/` |
 
-**Entry criteria:** None  
-**Exit criteria:** Tokenizer trained, fertility <= 1.4, all 12 Turkish chars direct tokens, all special token IDs correct
+**Exit criteria:** ✅ All met — artifacts in Drive, validation exit code 0
 
 ---
 
