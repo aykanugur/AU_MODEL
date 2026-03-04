@@ -4,9 +4,11 @@ model/transformer.py — RMSNorm, TransformerBlock, AUModel.
 Contains:
   - RMSNorm:         Root-mean-square normalisation (replaces LayerNorm).
   - TransformerBlock: One decoder layer with pre-norm + residuals.
-  - AUModel:         Full decoder-only transformer (~700M params by default).
+  - AUModel:         Full decoder-only transformer (~749.5M params by default).
 """
 from __future__ import annotations
+
+import math
 
 import torch
 import torch.nn as nn
@@ -89,7 +91,7 @@ class TransformerBlock(nn.Module):
 # ---------------------------------------------------------------------------
 
 class AUModel(nn.Module):
-    """AUModel — ~700M parameter decoder-only transformer.
+    """AUModel — ~749.5M parameter decoder-only transformer.
 
     Architecture highlights:
       - 24 TransformerBlocks with GQA (12/6 heads), RoPE, SwiGLU, RMSNorm
@@ -126,6 +128,39 @@ class AUModel(nn.Module):
             "freqs_cis",
             compute_freqs_cis(config.max_seq_len, config.head_dim, config.rope_theta),
         )
+
+        # Apply weight initialisation after all sub-modules are created
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        """Initialise all weights following LLaMA-style practice.
+
+        Rules:
+          - All nn.Embedding weights:          N(0, 0.02)
+          - All nn.Linear weights:             N(0, 0.02)
+          - Residual-branch projections only   N(0, 0.02 / sqrt(2 * num_layers))
+            (attn.wo and ffn.w2) — prevents activation scale from growing with depth.
+          - All bias terms:                    zeros (there are none — bias=False everywhere)
+          - RMSNorm weights:                   already 1.0 from nn.Parameter(torch.ones(...))
+          - lm_head.weight:                    tied to embed.weight — initialised once above
+
+        The embedding std=0.02 ensures that logits (= hidden @ embed.weight.T) have
+        variance ≈ d_model × 0.02² ≈ 0.6, keeping the initial softmax near-uniform and
+        CE loss close to ln(vocab_size) ≈ 11.07.
+        """
+        std = 0.02
+        residual_std = std / math.sqrt(2 * self.config.num_layers)
+
+        for module in self.modules():
+            if isinstance(module, nn.Embedding):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+            elif isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, mean=0.0, std=std)
+
+        # Down-scale residual-branch output projections
+        for block in self.blocks:
+            nn.init.normal_(block.attn.wo.weight, mean=0.0, std=residual_std)
+            nn.init.normal_(block.ffn.w2.weight, mean=0.0, std=residual_std)
 
     def forward(
         self,
