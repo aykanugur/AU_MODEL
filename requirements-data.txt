@@ -1,0 +1,9 @@
+# Data pipeline dependencies (Epic 3)
+# Install with: pip install -r requirements-data.txt
+pybloom-live>=4.0
+mmh3>=3.0
+datasets>=2.14
+sentencepiece>=0.1.99
+python-dotenv>=1.0
+numpy>=1.24
+requests>=2.28

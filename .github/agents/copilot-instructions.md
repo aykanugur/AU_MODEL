@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2026-03-04
 
 ## Active Technologies
+- Python 3.11 + `datasets` ≥2.14, `sentencepiece` ≥0.1.99, `numpy` ≥1.24, `pybloom-live` ≥4.0, `python-dotenv` ≥1.0, `torch` ≥2.0 (003-data-pipeline)
+- Google Drive (Colab) — flat binary `.bin` shards + `shards_manifest.json` + `bloom.pkl` (003-data-pipeline)
 
 - **Python 3.10+** (001-turkish-tokenizer)
 - **sentencepiece>=0.1.99** -- BPE tokenizer training and inference (001-turkish-tokenizer)
@@ -55,10 +57,10 @@ Python: PEP 8, type hints required, bias=False on all nn.Linear, BF16 for all tr
 - Fertility gate: <= 1.4 tokens/word -- hard exit
 
 ## Recent Changes
+- 003-data-pipeline: Added Python 3.11 + `datasets` ≥2.14, `sentencepiece` ≥0.1.99, `numpy` ≥1.24, `pybloom-live` ≥4.0, `python-dotenv` ≥1.0, `torch` ≥2.0
 - 002-model-architecture: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 002-model-architecture: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
-- 001-turkish-tokenizer: Phase 0 research (SentencePiece, validation patterns, wrapper design)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
